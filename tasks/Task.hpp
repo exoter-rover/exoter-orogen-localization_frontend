@@ -5,7 +5,77 @@
 
 #include "localization_frontend/TaskBase.hpp"
 
+/** General Libraries **/
+#include <math.h> /** math library (for natural Log among others) **/
+#include <vector> /** std vector **/
+
+/** Eigen **/
+#include <Eigen/Core>/** Eigen core library **/
+#include <Eigen/StdVector> /** For STL container with Eigen types **/
+#include <Eigen/Dense> /** Algebra and transformation matrices **/
+
+/** Boost **/
+#include <boost/circular_buffer.hpp> /** For circular buffers **/
+
+/** Rock libraries **/
+#include "frame_helper/FrameHelper.h" /** Rock lib for manipulate frames **/
+
 namespace localization_frontend {
+
+    /** Current counter of samples arrived to each port **/
+    struct CounterInputPorts
+    {
+        void reset()
+        {
+            jointsSamples = 0;
+            imuSamples = 0;
+            orientationSamples = 0;
+            referencePoseSamples = 0;
+            return;
+        }
+
+       	unsigned int jointsSamples; /** counter for encoders samples**/
+ 	unsigned int imuSamples; /** counter of inertial sensors samples **/
+ 	unsigned int orientationSamples; /** counter of orientation samples **/
+ 	unsigned int referencePoseSamples; /** counter of pose information coming from external measurement **/
+
+    };
+
+    /** Number of samples to process in the callback function **/
+    struct NumberInputPorts
+    {
+        void reset()
+        {
+            jointsSamples = 0;
+            imuSamples = 0;
+            orientationSamples = 0;
+            referencePoseSamples = 0;
+            return;
+        }
+
+	unsigned int jointsSamples; /** number of encoders samples for the re-sampling**/
+ 	unsigned int imuSamples; /** number of inertial sensors samples **/
+ 	unsigned int orientationSamples; /** number of orientation samples **/
+ 	unsigned int referencePoseSamples; /** number of pose information coming from external measurement **/
+    };
+
+    /** Input port samples arrived ON/OFF flags **/
+    struct FlagInputPorts
+    {
+        void reset()
+        {
+            jointsSamples = false;
+            imuSamples = false;
+            orientationSamples = false;
+            referencePoseSamples = false;
+            return;
+        }
+
+        bool jointsSamples;//Encoders
+        bool imuSamples;//Inertial sensors
+        bool orientationSamples;//Orientation
+        bool referencePoseSamples;//Initial pose
+    };
 
     /*! \class Task 
      * \brief The task context provides and requires services. It uses an ExecutionEngine to perform its functions.
@@ -24,7 +94,91 @@ namespace localization_frontend {
     class Task : public TaskBase
     {
 	friend class TaskBase;
+
     protected:
+        static const int  DEFAULT_CIRCULAR_BUFFER_SIZE = 2; /** Default number of objects to store regarding the inputs port **/
+
+    protected:
+
+        /******************************/
+        /*** Control Flow Variables ***/
+        /******************************/
+
+	/** Initial pose for the world to navigation transform **/
+	bool initPosition, initAttitude;
+
+        /** Number of samples to process in the input ports callback function **/
+        NumberInputPorts number;
+
+ 	/** Current counter of samples arrived to each input port **/
+        CounterInputPorts counter;
+
+        /** Data arrived ON/OFF Flag **/
+        FlagInputPorts flag;
+
+        /**************************/
+        /*** Property Variables ***/
+        /**************************/
+
+        /** Framework configuration values **/
+        Configuration config;
+
+        /******************************************/
+        /*** General Internal Storage Variables ***/
+        /******************************************/
+
+        /** Align of world to navigation (in case of true in the properties) **/
+        base::samples::RigidBodyState alignWorld2Navigation;
+
+        /** Body to Left camera transformation **/
+        base::samples::RigidBodyState body2lcameraRbs;
+
+        /** Frame helper **/
+        frame_helper::FrameHelper frameHelperLeft, frameHelperRight;
+
+        /***********************************/
+        /** Input ports dependent buffers **/
+        /***********************************/
+
+        /** Buffer for raw inputs port samples (the desired filter frequency) **/
+ 	boost::circular_buffer<base::samples::Joints> cbJointsSamples;
+	boost::circular_buffer<base::samples::IMUSensors> cbImuSamples;
+	boost::circular_buffer<base::samples::RigidBodyState> cbOrientationSamples;
+	
+ 	/** Buffer for filtered Inputs port samples (Store the samples and compute the velocities) **/
+	boost::circular_buffer<base::samples::Joints> jointsSamples; /** Encoder Status information  **/
+	boost::circular_buffer<base::samples::IMUSensors> imuSamples; /** IMU samples **/
+	boost::circular_buffer<base::samples::RigidBodyState> orientationSamples; /** IMU samples **/
+	boost::circular_buffer<base::samples::RigidBodyState> referencePoseSamples; /** Pose information (init and debug)**/
+
+        /** State information **/
+        base::samples::RigidBodyState poseEstimationSamples;
+
+        /***************************/
+        /** Output port variables **/
+        /***************************/
+
+        /** Joints state of the robot **/
+        base::samples::Joints jointsSamplesOut;
+
+        /** Calibrated and compensated inertial values **/
+        base::samples::IMUSensors inertialSamplesOut;
+
+        /** Ground truth out coming for an external system (if available like Vicon or GPS) */
+        base::samples::RigidBodyState referenceOut;
+
+        /** Calculated initial navigation frame pose expressed in world frame */
+        base::samples::RigidBodyState world2navigationRbs;
+
+        /** Undistorted camera images **/
+        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> leftFrame;
+        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> rightFrame;
+
+    protected:
+
+        /************************/
+        /** Callback functions **/
+        /************************/
 
         virtual void inertial_samplesTransformerCallback(const base::Time &ts, const ::base::samples::IMUSensors &inertial_samples_sample);
 
@@ -115,6 +269,22 @@ namespace localization_frontend {
          * before calling start() again.
          */
         void cleanupHook();
+
+        /** @brief Get the correct value from the input ports buffers
+	 */
+	void inputPortSamples();
+
+        /** @brief Compute Cartesian and Model velocities 
+	 */
+	void calculateVelocities();
+
+        /** @brief Port out the values
+	 */
+        void outputPortSamples();
+
+     public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
     };
 }
 
