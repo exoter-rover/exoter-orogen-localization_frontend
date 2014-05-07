@@ -104,7 +104,7 @@ namespace localization_frontend {
         /*** Control Flow Variables ***/
         /******************************/
 
-	/** Initial pose for the world to navigation transform **/
+	/** Initial position for the world to navigation transform **/
 	bool initPosition, initAttitude;
 
         /** Number of samples to process in the input ports callback function **/
@@ -120,18 +120,11 @@ namespace localization_frontend {
         /*** Property Variables ***/
         /**************************/
 
-        /** Framework configuration values **/
-        Configuration config;
+        double proprioceptive_output_frequency;
 
         /******************************************/
         /*** General Internal Storage Variables ***/
         /******************************************/
-
-        /** Align of world to navigation (in case of true in the properties) **/
-        base::samples::RigidBodyState alignWorld2Navigation;
-
-        /** Body to Left camera transformation **/
-        base::samples::RigidBodyState body2lcameraRbs;
 
         /** Frame helper **/
         frame_helper::FrameHelper frameHelperLeft, frameHelperRight;
@@ -140,7 +133,7 @@ namespace localization_frontend {
         /** Input ports dependent buffers **/
         /***********************************/
 
-        /** Buffer for raw inputs port samples (the desired filter frequency) **/
+        /** Buffer for raw inputs port samples (the desired filter frequency for proprioceptive inputs) **/
  	boost::circular_buffer<base::samples::Joints> cbJointsSamples;
 	boost::circular_buffer<base::samples::IMUSensors> cbImuSamples;
 	boost::circular_buffer<base::samples::RigidBodyState> cbOrientationSamples;
@@ -150,9 +143,6 @@ namespace localization_frontend {
 	boost::circular_buffer<base::samples::IMUSensors> imuSamples; /** IMU samples **/
 	boost::circular_buffer<base::samples::RigidBodyState> orientationSamples; /** IMU samples **/
 	boost::circular_buffer<base::samples::RigidBodyState> referencePoseSamples; /** Pose information (init and debug)**/
-
-        /** State information **/
-        base::samples::RigidBodyState poseEstimationSamples;
 
         /***************************/
         /** Output port variables **/

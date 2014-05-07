@@ -28,10 +28,6 @@ Task::Task(std::string const& name)
     /*** Internal Storage Variables ***/
     /**********************************/
 
-    /** Align of world to navigation (in case of true in the properties) **/
-    alignWorld2Navigation.invalidate();
-    alignWorld2Navigation.position.setZero();
-
     /** Default size for the circular_buffer of the raw port samples **/
     cbJointsSamples = boost::circular_buffer<base::samples::Joints>(DEFAULT_CIRCULAR_BUFFER_SIZE);
     cbImuSamples = boost::circular_buffer<base::samples::IMUSensors> (DEFAULT_CIRCULAR_BUFFER_SIZE);
@@ -58,36 +54,13 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 {
     referencePoseSamples.push_front(reference_pose_samples_sample);
 
-    Eigen::Affine3d tf; /** Transformer transformation **/
-    Eigen::Quaternion <double> qtf; /** Transformer rotation in quaternion form **/
-
-    /** Get the transformation (iMoby transformer Tbody_reference)) **/
-    if (!_reference2body.get(ts, tf, false))
-	return;
-
-    qtf = Eigen::Quaternion <double> (tf.rotation());
-
     #ifdef DEBUG_PRINTS
     std::cout<<"** [EXOTER REFERENCE-POSE]Received referencePoseSamples sample at("<<reference_pose_samples_sample.time.toMicroseconds()<<") **\n";
     #endif
 
-    /** Apply the transformer pose offset **/
-    referencePoseSamples[0].position -= tf.translation(); //position world_body = world_reference - body_reference
-    referencePoseSamples[0].position -= alignWorld2Navigation.position; //Align to world to navigation if selected in the task properties
-    referencePoseSamples[0].orientation = referencePoseSamples[0].orientation * qtf.inverse(); //world_2_body = world_2_reference * reference_2_body
-
-
     if (!initPosition)
     {
-        if (config.align_world_to_navigation_frame)
-        {
-            world2navigationRbs.position.setZero();
-            alignWorld2Navigation.position = referencePoseSamples[0].position;
-        }
-        else
-        {
-            world2navigationRbs.position = referencePoseSamples[0].position;
-        }
+        world2navigationRbs.position = referencePoseSamples[0].position;
 	
         world2navigationRbs.velocity.setZero();
 
@@ -96,7 +69,7 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 	world2navigationRbs.cov_velocity = Eigen::Matrix3d::Zero();
 	
 	#ifdef DEBUG_PRINTS
-	Eigen::Matrix <double,3,1> euler; /** In euler angles **/
+	Eigen::Matrix <double,3,1> euler; /** In Euler angles **/
 	euler[2] = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];//Yaw
 	euler[1] = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[1];//Pitch
 	euler[0] = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[2];//Roll
@@ -162,9 +135,9 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 void Task::inertial_samplesTransformerCallback(const base::Time &ts, const ::base::samples::IMUSensors &inertial_samples_sample)
 {
     Eigen::Affine3d tf; /** Transformer transformation **/
-    Eigen::Quaternion <double> qtf; /** Rotation in quaternion form **/
+    Eigen::Quaternion <double> qtf; /** Rotation part of the transformation in quaternion form **/
 
-    /** Get the transformation (esa npi transformation) Tbody_imu**/
+    /** Get the transformation (transformation) Tbody_imu**/
     if (!_body2imu.get(ts, tf, false))
 	return;
 
@@ -212,9 +185,9 @@ void Task::inertial_samplesTransformerCallback(const base::Time &ts, const ::bas
 void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &orientation_samples_sample)
 {
     Eigen::Affine3d tf; /** Transformer transformation **/
-    Eigen::Quaternion <double> qtf; /** Rotation in quaternion form **/
+    Eigen::Quaternion <double> qtf; /** Rotation of the transformation in quaternion form **/
 
-    /** Get the transformation (esa npi transformation) Tbody_imu**/
+    /** Get the transformation (transformation) Tbody_imu**/
     if (!_body2imu.get(ts, tf, false))
 	return;
 
@@ -304,7 +277,27 @@ void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base:
     std::cout<<"** [EXOTER ENCODERS-SAMPLES] [FLAGS] flagJoints ("<<flag.jointsSamples<<") flagIMU("<<flag.imuSamples<<") flagOrient("<<flag.orientationSamples<<") **\n";
     #endif
 
-    if (initAttitude && initPosition)
+    /** If there is not an external reference system **/
+    if (!_reference_pose_samples.connected())
+    {
+	/** set zero position **/
+	world2navigationRbs.position.setZero();
+	world2navigationRbs.velocity.setZero();
+	world2navigationRbs.angular_velocity.setZero();
+	
+	/** Assume very well know initial attitude **/
+	world2navigationRbs.cov_orientation = Eigen::Matrix <double, 3 , 3>::Zero();
+	world2navigationRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
+	
+	/** Assume well known starting position **/
+	world2navigationRbs.cov_position = Eigen::Matrix <double, 3 , 3>::Zero();
+	world2navigationRbs.cov_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
+	
+	initPosition = true;
+    }
+
+
+    if (initPosition)
     {
         if (flag.imuSamples && flag.orientationSamples && flag.jointsSamples)
         {
@@ -340,17 +333,6 @@ void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base:
 
 void Task::left_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &left_frame_sample)
 {
-    /** Get the transformation from the transformer (iMoby transformer) **/
-    Eigen::Affine3d tf;
-
-    /** iMoby transformer Tbody_lcamera **/
-    if(!_lcamera2body.get( ts, tf ))
-    {
-        RTT::log(RTT::Warning)<<"[LEFT-CAMERA FATAL ERROR] No transformation provided for the transformer."<<RTT::endlog();
-        throw std::runtime_error("[LEFT-CAMERA FATAL ERROR] Transformation for transformer not provided");
-        return;
-    }
-
     #ifdef DEBUG_PRINTS
     std::cout<<"[EXOTER LEFT-CAMERA] Frame at: "<<left_frame_sample->time.toMicroseconds()<<"\n";
     #endif
@@ -370,17 +352,6 @@ void Task::left_frameTransformerCallback(const base::Time &ts, const ::RTT::extr
 
 void Task::right_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &right_frame_sample)
 {
-    /** Get the transformation from the transformer (iMoby transformer) **/
-    Eigen::Affine3d tf;
-
-    /** iMoby transformer Tbody_lcamera **/
-    if(!_lcamera2body.get( ts, tf ))
-    {
-        RTT::log(RTT::Warning)<<"[RIGHT-CAMERA FATAL ERROR] No transformation provided for the transformer."<<RTT::endlog();
-        throw std::runtime_error("[RIGHT-CAMERA FATAL ERROR] Transformation for transformer not provided");
-        return;
-    }
-
     #ifdef DEBUG_PRINTS
     std::cout<<"[EXOTER RIGHT-CAMERA] Frame at: "<<right_frame_sample->time.toMicroseconds()<<"\n";
     #endif
@@ -400,6 +371,33 @@ void Task::right_frameTransformerCallback(const base::Time &ts, const ::RTT::ext
 
 void Task::point_cloud_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Pointcloud &point_cloud_samples_sample)
 {
+    /** Get the transformation from the transformer **/
+    Eigen::Affine3d tf;
+
+    /** Get the transformation (transformation) Tbody_laser**/
+    if(!_body2laser.get( ts, tf ))
+    {
+        RTT::log(RTT::Warning)<<"[ EXOTER POINT CLOUD FATAL ERROR] No transformation provided for the transformer."<<RTT::endlog();
+        return;
+    }
+
+    base::samples::Pointcloud pointcloud;
+
+    /** Transform the point cloud **/
+    pointcloud.time = point_cloud_samples_sample.time;
+    pointcloud.points.resize(point_cloud_samples_sample.points.size());
+    pointcloud.colors = point_cloud_samples_sample.colors;
+    register int k = 0;
+    for (std::vector<base::Point>::const_iterator it = point_cloud_samples_sample.points.begin();
+        it != point_cloud_samples_sample.points.end(); it++)
+    {
+        pointcloud.points[k] = tf * (*it);
+        k++;
+    }
+
+    /** Write the point cloud into the port **/
+    _point_cloud_samples_out.write(pointcloud);
+
 }
 
 /// The following lines are template definitions for the various state machine
@@ -414,35 +412,16 @@ bool Task::configureHook()
     /************************/
     /** Read configuration **/
     /************************/
-    config = _configuration.value();
+    proprioceptive_output_frequency = _proprioceptive_output_frequency.value();
 
     /*******************************************/
     /** Initial world to navigation transform **/
     /*******************************************/
 
-    /** Set the initial world to navigation frame transform **/
+    /** Set the initial world to navigation frame transform (transformation for transformer)**/
     world2navigationRbs.invalidate();
     world2navigationRbs.sourceFrame = "world";
     world2navigationRbs.targetFrame = "navigation";
-
-    /** If there is not an external reference system **/
-    if (!_reference_pose_samples.connected())
-    {
-	/** set zero position **/
-	world2navigationRbs.position.setZero();
-	world2navigationRbs.velocity.setZero();
-	world2navigationRbs.angular_velocity.setZero();
-	
-	/** Assume very well know initial attitude **/
-	world2navigationRbs.cov_orientation = Eigen::Matrix <double, 3 , 3>::Zero();
-	world2navigationRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
-	
-	/** Assume well known starting position **/
-	world2navigationRbs.cov_position = Eigen::Matrix <double, 3 , 3>::Zero();
-	world2navigationRbs.cov_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
-	
-	initPosition = true;
-    }
 
     /******************************************/
     /** Use properties to Configure the Task **/
@@ -452,12 +431,11 @@ bool Task::configureHook()
     counter.reset();
 
     /** Set the number of samples between each sensor input (if there are not coming at the same sampling rate) */
-    if (config.output_frequency != 0.00)
+    if (proprioceptive_output_frequency != 0.00)
     {
-	number.imuSamples = (1.0/_inertial_samples_period.value())/config.output_frequency;
-	number.orientationSamples = (1.0/_orientation_samples_period.value())/config.output_frequency;
-	number.jointsSamples = (1.0/_joints_samples_period.value())/config.output_frequency;
-	number.referencePoseSamples = (1.0/_reference_pose_samples_period.value())/config.output_frequency;
+	number.imuSamples = (1.0/_inertial_samples_period.value())/proprioceptive_output_frequency;
+	number.orientationSamples = (1.0/_orientation_samples_period.value())/proprioceptive_output_frequency;
+	number.jointsSamples = (1.0/_joints_samples_period.value())/proprioceptive_output_frequency;
     }
 
     #ifdef DEBUG_PRINTS
@@ -471,10 +449,10 @@ bool Task::configureHook()
     cbImuSamples.set_capacity(number.imuSamples);
     cbOrientationSamples.set_capacity(number.orientationSamples);
 
-    for(register unsigned int i=0; i<cbJointsSamples.size(); ++i)
-    {
-	cbJointsSamples[i].resize(config.jointsNames.size()-1);
-    }
+   // for(register unsigned int i=0; i<cbJointsSamples.size(); ++i)
+   // {
+   //     cbJointsSamples[i].resize(config.jointsNames.size()-1);
+   // }
 
 
     #ifdef DEBUG_PRINTS
@@ -484,11 +462,11 @@ bool Task::configureHook()
     #endif
 
     /** Initialize the samples for the filtered buffer hbridge values **/
-    for(register unsigned int i=0;i<jointsSamples.size();i++)
-    {
-	/** Sizing hbridgeStatus **/
-	jointsSamples[i].resize(config.jointsNames.size()-1);
-    }
+   // for(register unsigned int i=0;i<jointsSamples.size();i++)
+   // {
+   //     /** Sizing hbridgeStatus **/
+   //     jointsSamples[i].resize(config.jointsNames.size()-1);
+   // }
 
     /** Initialize the samples for the filtered buffer imuSamples values **/
     for(register unsigned int i=0; i<imuSamples.size();++i)
@@ -508,20 +486,12 @@ bool Task::configureHook()
 	referencePoseSamples[i].invalidate();
     }
 
-    /** Initialize Estimated Pose and bias values **/
-    poseEstimationSamples.time.fromMicroseconds (base::NaN<uint64_t>());
-    poseEstimationSamples.orientation = base::Orientation(Eigen::Vector4d::Ones() * base::NaN<double>());
-
     #ifdef DEBUG_PRINTS
     std::cout<<"[EXOTER CONFIGURE] jointsSamples has capacity "<<jointsSamples.capacity()<<" and size "<<jointsSamples.size()<<"\n";
     std::cout<<"[EXOTER CONFIGURE] imuSamples has capacity "<<imuSamples.capacity()<<" and size "<<imuSamples.size()<<"\n";
     std::cout<<"[EXOTER CONFIGURE] orientationSamples has capacity "<<orientationSamples.capacity()<<" and size "<<orientationSamples.size()<<"\n";
     std::cout<<"[EXOTER CONFIGURE] referencePoseSamples has capacity "<<referencePoseSamples.capacity()<<" and size "<<referencePoseSamples.size()<<"\n";
     #endif
-
-    /** Output Joints state vector **/
-    jointsSamplesOut.resize(config.jointsNames.size());
-    jointsSamplesOut.names = config.jointsNames;
 
     /** Output images **/
     ::base::samples::frame::Frame *lFrame = new ::base::samples::frame::Frame();
@@ -536,21 +506,12 @@ bool Task::configureHook()
     frameHelperLeft.setCalibrationParameter(_left_camera_parameters.value());
     frameHelperRight.setCalibrationParameter(_right_camera_parameters.value());
 
-    if (_reference_pose_samples.connected())
-    {
-	RTT::log(RTT::Warning) << "[Info] Initial pose/Ground Truth connected" << RTT::endlog();
-    }
-    else
-    {
-	RTT::log(RTT::Warning) << "[Info] Initial orientation/Ground Truth NO connected." << RTT::endlog();
-	RTT::log(RTT::Warning) << "[Info] Zero Yaw angle pointing to North is then assumed." << RTT::endlog();
-	RTT::log(RTT::Warning) << "[Info] Pitch and Roll are taken from inertial sensors assuming static body at Initial phase of this task." << RTT::endlog();
-    }
-
+    /** Information of the configuration **/
     RTT::log(RTT::Warning)<<"[Info] Frequency of IMU samples[Hertz]: "<<(1.0/_inertial_samples_period.value())<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Info] Frequency of Orientation samples[Hertz]: "<<(1.0/_orientation_samples_period.value())<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Info] Frequency of Joints Samples[Hertz]: "<<(1.0/_joints_samples_period.value())<<RTT::endlog();
-    RTT::log(RTT::Warning)<<"[Info] Output Frequency[Hertz]: "<<config.output_frequency<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Info] Frequency of Reference System [Hertz]: "<<(1.0/_reference_pose_samples_period.value())<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Info] Output Frequency for Proprioceptive Inputs[Hertz]: "<<proprioceptive_output_frequency<<RTT::endlog();
 
     RTT::log(RTT::Warning)<<"[Info] number.jointsSamples: "<<number.jointsSamples<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Info] number.imuSamples: "<<number.imuSamples<<RTT::endlog();
@@ -602,7 +563,7 @@ void Task::inputPortSamples()
 
 
     /** sizing the joints **/
-    joint.resize(config.jointsNames.size()-1);
+    //joint.resize(config.jointsNames.size()-1);
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[GetInportValue] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
@@ -612,7 +573,7 @@ void Task::inputPortSamples()
     /** ********* **/
     /**  Joints   **/
     /** ********* **/
-    for (register size_t i=0; i<config.jointsNames.size(); ++i)
+    for (register size_t i=0; i<joint.size(); ++i)
     {
         joint[i].position = 0.00;
         joint[i].speed = 0.00;
@@ -621,7 +582,7 @@ void Task::inputPortSamples()
     }
 
     /** Process the buffer **/
-    for (register size_t j = 0; j<config.jointsNames.size(); ++j)
+    for (register size_t j = 0; j<joint.size(); ++j)
     {
         for (register size_t i = 0; i<cbJointsSize; ++i)
         {
@@ -693,7 +654,7 @@ void Task::inputPortSamples()
     /*****************************/
     /** Store the Joint values  **/
     /*****************************/
-    for (register int i=0; i<static_cast<int> ((config.jointsNames.size()-1)); ++i)
+    for (register int i=0; i<static_cast<int> ((joint.size()-1)); ++i)
     {
         jointsSamplesOut[i].position = joint[i].position;
     }
@@ -706,14 +667,14 @@ void Task::inputPortSamples()
 
 void Task::calculateVelocities()
 {
-    double delta_t = (1.0/config.output_frequency);
+    double delta_t = (1.0/proprioceptive_output_frequency);
 
     /** Joint velocities for the vector **/
     register int jointIdx = 0;
     base::samples::Joints samples = jointsSamples[0];
 
-    for(std::vector<std::string>::const_iterator it = config.jointsNames.begin();
-        it != config.jointsNames.end(); it++)
+    for(std::vector<std::string>::const_iterator it = samples.names.begin();
+        it != samples.names.end(); it++)
     {
         base::JointState const &state(samples[*it]);
 

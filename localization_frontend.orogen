@@ -22,10 +22,10 @@ task_context "Task" do
     #*************************
     #**** Task Properties ****
     #*************************
-    property('configuration', 'localization_frontend/Configuration').
-        doc 'General configuration values to run the task'
+    property('proprioceptive_output_frequency', 'double').
+        doc 'Output frequency of the proprioceptive sensors (joints, inertial sensors and orientation).'
 
-    #*******************************
+    #******************************
     #**** Camera Properties ********
     #*******************************
     property("left_camera_parameters", 'frame_helper/CameraCalibration').
@@ -43,6 +43,7 @@ task_context "Task" do
 
     #******* Proprioceptive sensors *********
     input_port('joints_samples', '/base/samples/Joints').
+        needs_reliable_connection.
 	doc 'Timestamped robot joints.'
 
     input_port('inertial_samples', '/base/samples/IMUSensors').
@@ -50,6 +51,7 @@ task_context "Task" do
         doc 'provides timestamped IMUReading samples containing the calibrated sensor readings (linear acceleration and angular velocity).'
 
     input_port('orientation_samples', '/base/samples/RigidBodyState').
+        needs_reliable_connection.
         doc 'provides timestamped IMU orientation samples containing the quaternion (some IMUs provide this information from internal filters).'
 
     #*******  Exteroceptive sensors *********
@@ -70,18 +72,13 @@ task_context "Task" do
     # Transformer:
     # All robot transformations are required
     # to compute the sensor output in body frame.
-    # It uses the iMoby convention with is:
-    # imu to body transformation is imu expressed in
-    # body frame.
     ##############################################
     transformer do
-	transform "body", "imu" #esa-npi body to imu in transformation convention
-	transform "reference", "body" #iMoby transformation reference expressed in body (it brings reference to body)
-        transform "lcamera", "body" #iMoby transformation lcamera expressed in body
-        transform "laser", "body" #iMoby transformation laser expressed in body (it brings laser points in body frame pbody = Tbody2laser * plaser)
-	align_port("joints_samples", 0.001)
-	align_port("inertial_samples", 0.002)
-	align_port("orientation_samples", 0.002)
+	transform "body", "imu" # body to imu in transformation convention (pbody = Tbody2imu pimu)
+        transform "body", "laser" # body to laser (tof or lidar) in transformation (pbody = Tbody2laser * plaser)
+	align_port("joints_samples", 0.04)
+	align_port("inertial_samples", 0.04)
+	align_port("orientation_samples", 0.008)
 	align_port("left_frame", 0.5)
 	align_port("right_frame", 0.5)
 	align_port("point_cloud_samples", 0.025)
@@ -118,7 +115,7 @@ task_context "Task" do
 	doc 'Delta pose and velocities computed from the ground truth system.'
 
     output_port('world_to_navigation_out', 'base/samples/RigidBodyState').
-	doc 'Transformation: navigation frame expressed in the world frame.'
+	doc 'Transformation: navigation frame (initial starting point) expressed in the world frame.'
 
 
     #**********************************
@@ -138,15 +135,6 @@ task_context "Task" do
 
     output_port('body_to_tof', 'base/samples/RigidBodyState').
 	doc 'Body to TOF camera transformation: TOF frame expressed with respect to the body frame. Tbody2tof'
-
-    output_port('body_to_lcamera', 'base/samples/RigidBodyState').
-	doc 'Body to Left Camera transformation : left camera frame expressed with respect to the body frame. Tbody2lcamera'
-
-    output_port('body_to_rcamera', 'base/samples/RigidBodyState').
-	doc 'Body to Right Camera transformation : right camera frame expressed with respect to the body frame. Tbody2rcamera'
-
-    output_port('body_to_lcamera_euler', 'base/Vector3d')
-	doc 'Body to Laser transformation: laser frame expressed with respect to the body frame in Euler angles.'
 
     port_driven
 
