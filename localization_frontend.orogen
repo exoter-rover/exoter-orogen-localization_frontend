@@ -25,6 +25,16 @@ task_context "Task" do
     property('proprioceptive_output_frequency', 'double').
         doc 'Output frequency of the proprioceptive sensors (joints, inertial sensors and orientation).'
 
+    property('mast2tilt_link', 'double').
+        doc 'Link distance between mast top point and tilt motor axle. Required to compute the mast2ptu tranformation'
+
+    property('ptuNames', 'std/vector<std/string>').
+	doc 'PTU joints searching by names.'
+
+    property('jointsNames', 'std/vector<std/string>').
+	doc 'Locomotion joints searching by names.'
+
+
     #******************************
     #**** Camera Properties ********
     #*******************************
@@ -45,6 +55,10 @@ task_context "Task" do
     input_port('joints_samples', '/base/samples/Joints').
         needs_reliable_connection.
 	doc 'Timestamped robot joints.'
+
+    input_port('ptu_samples', '/base/samples/Joints').
+        needs_reliable_connection.
+	doc 'Timestamped robot PTU joints status'
 
     input_port('inertial_samples', '/base/samples/IMUSensors').
         needs_reliable_connection.
@@ -77,6 +91,7 @@ task_context "Task" do
 	transform "body", "imu" # body to imu in transformation convention (pbody = Tbody2imu pimu)
         transform "body", "laser" # body to laser (tof or lidar) in transformation (pbody = Tbody2laser * plaser)
 	align_port("joints_samples", 0.04)
+	align_port("ptu_samples", 0.04)
 	align_port("inertial_samples", 0.04)
 	align_port("orientation_samples", 0.008)
 	align_port("left_frame", 0.5)
@@ -115,7 +130,10 @@ task_context "Task" do
 	doc 'Delta pose and velocities computed from the ground truth system.'
 
     output_port('world_to_navigation_out', 'base/samples/RigidBodyState').
-	doc 'Transformation: navigation frame (initial starting point) expressed in the world frame.'
+	doc 'Transformation for the transformer: navigation frame (initial starting point) expressed in the world frame.'
+
+    output_port('mast_to_ptu_out', 'base/samples/RigidBodyState').
+	doc 'Transformation for the transformer: Pan and Tilt Unit frame expressed in the mast frame.'
 
 
     #**********************************
@@ -133,8 +151,11 @@ task_context "Task" do
     output_port('angular_rate_old', 'double').
 	doc 'Angular velocity of the FL wheel(using 2nd order)'
 
-    output_port('body_to_tof', 'base/samples/RigidBodyState').
-	doc 'Body to TOF camera transformation: TOF frame expressed with respect to the body frame. Tbody2tof'
+    #*********************************
+    #******* Extra Task States *******
+    #*********************************
+    runtime_states :INITIAL_POSITIONING
+    exception_states :NAN_ERROR
 
     port_driven
 

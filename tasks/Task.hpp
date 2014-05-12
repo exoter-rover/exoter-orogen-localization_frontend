@@ -122,6 +122,10 @@ namespace localization_frontend {
 
         double proprioceptive_output_frequency;
 
+        std::vector<std::string> ptuNames;
+
+        std::vector<std::string> jointsNames;
+
         /******************************************/
         /*** General Internal Storage Variables ***/
         /******************************************/
@@ -160,6 +164,9 @@ namespace localization_frontend {
         /** Calculated initial navigation frame pose expressed in world frame */
         base::samples::RigidBodyState world2navigationRbs;
 
+        /** Calculated Pan and Tilt Unit transformation */
+        base::samples::RigidBodyState mast2ptuRbs;
+
         /** Undistorted camera images **/
         RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> leftFrame;
         RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> rightFrame;
@@ -170,19 +177,23 @@ namespace localization_frontend {
         /** Callback functions **/
         /************************/
 
+        virtual void reference_pose_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &reference_pose_samples_sample);
+
         virtual void inertial_samplesTransformerCallback(const base::Time &ts, const ::base::samples::IMUSensors &inertial_samples_sample);
-
-        virtual void joints_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample);
-
-        virtual void left_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &left_frame_sample);
 
         virtual void orientation_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &orientation_samples_sample);
 
-        virtual void point_cloud_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Pointcloud &point_cloud_samples_sample);
+        virtual void joints_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample);
 
-        virtual void reference_pose_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &reference_pose_samples_sample);
+        virtual void ptu_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &ptu_samples_sample);
+
+        virtual void left_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &left_frame_sample);
 
         virtual void right_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &right_frame_sample);
+
+        virtual void point_cloud_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Pointcloud &point_cloud_samples_sample);
+
+
 
     public:
         /** TaskContext constructor for Task
@@ -266,7 +277,7 @@ namespace localization_frontend {
 
         /** @brief Compute Cartesian and Model velocities 
 	 */
-	void calculateVelocities();
+	void calculateJointsVelocities();
 
         /** @brief Port out the values
 	 */
