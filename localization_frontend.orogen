@@ -44,9 +44,6 @@ task_context "Task" do
     property("right_camera_parameters", 'frame_helper/CameraCalibration').
         doc 'Camera intrinsic parameters.'
 
-    property("extrinsic_camera_parameters", 'frame_helper/ExtrinsicCalibration').
-        doc 'Transformation from Left to Right camera principal points.'
-
     #******************************
     #******* Input ports  *********
     #******************************
