@@ -449,7 +449,7 @@ bool Task::configureHook()
     /************************/
     proprioceptive_output_frequency = _proprioceptive_output_frequency.value();
     ptuNames = _ptuNames.value();
-    jointsNames = _jointsNames.value();
+    jointNames = _jointNames.value();
 
     /*******************************************/
     /** Initial world to navigation transform **/
@@ -591,7 +591,7 @@ void Task::inputPortSamples()
     base::samples::RigidBodyState orientation;
 
     /** sizing the joints **/
-    joint.resize(jointsNames.size()-1);
+    joint.resize(jointNames.size()-1);
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[GetInportValue] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";

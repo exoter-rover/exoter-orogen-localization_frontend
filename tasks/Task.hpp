@@ -124,7 +124,7 @@ namespace localization_frontend {
 
         std::vector<std::string> ptuNames;
 
-        std::vector<std::string> jointsNames;
+        std::vector<std::string> jointNames;
 
         /******************************************/
         /*** General Internal Storage Variables ***/

@@ -31,7 +31,7 @@ task_context "Task" do
     property('ptuNames', 'std/vector<std/string>').
 	doc 'PTU joints searching by names.'
 
-    property('jointsNames', 'std/vector<std/string>').
+    property('jointNames', 'std/vector<std/string>').
 	doc 'Locomotion joints searching by names.'
 
 
