@@ -274,10 +274,6 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 
             if (initPosition)
             {
-                /** Port-out the estimated world 2 navigation transform **/
-                world2navigationRbs.time = orientation_samples_sample.time;//timestamp;
-                _world_to_navigation_out.write(world2navigationRbs);
-
                 if (state() != RUNNING)
                     state(RUNNING);
             }
@@ -358,6 +354,7 @@ void Task::ptu_samplesTransformerCallback(const base::Time &ts, const ::base::sa
     tf.translation() = Eigen::Vector3d (0.00, 0.00, _mast2tilt_link.value());
     tf = tf * Eigen::Affine3d (Eigen::AngleAxisd(tilt_value, Eigen::Vector3d::UnitY()));
 
+    mast2ptuRbs.time = ptu_samples_sample.time;
     mast2ptuRbs.setTransform(tf);
 
     /** Write the PTU transformation into the port **/
@@ -418,7 +415,7 @@ void Task::point_cloud_samplesTransformerCallback(const base::Time &ts, const ::
 
     base::samples::Pointcloud pointcloud;
 
-    /** Transform the point cloud **/
+    /** Transform the point cloud in body frame **/
     pointcloud.time = point_cloud_samples_sample.time;
     pointcloud.points.resize(point_cloud_samples_sample.points.size());
     pointcloud.colors = point_cloud_samples_sample.colors;
@@ -497,6 +494,18 @@ bool Task::configureHook()
     std::cout<<"[EXOTER CONFIGURE] cbOrientationSamples has capacity "<<cbOrientationSamples.capacity()<<" and size "<<cbOrientationSamples.size()<<"\n";
     #endif
 
+    for(register unsigned int i=0; i<cbJointsSamples.size(); ++i)
+    {
+	cbJointsSamples[i].resize(jointNames.size());
+    }
+
+    /** Initialize the samples for the filtered buffer joint values **/
+    for(register unsigned int i=0;i<jointsSamples.size();i++)
+    {
+	/** Sizing the joints **/
+	jointsSamples[i].resize(jointNames.size());
+    }
+
     /** Initialize the samples for the filtered buffer imuSamples values **/
     for(register unsigned int i=0; i<imuSamples.size();++i)
     {
@@ -521,6 +530,11 @@ bool Task::configureHook()
     std::cout<<"[EXOTER CONFIGURE] orientationSamples has capacity "<<orientationSamples.capacity()<<" and size "<<orientationSamples.size()<<"\n";
     std::cout<<"[EXOTER CONFIGURE] referencePoseSamples has capacity "<<referencePoseSamples.capacity()<<" and size "<<referencePoseSamples.size()<<"\n";
     #endif
+
+    /** Output Joints state vector **/
+    jointsSamplesOut.resize(jointNames.size());
+    jointsSamplesOut.names = jointNames;
+
 
     /** Output images **/
     ::base::samples::frame::Frame *lFrame = new ::base::samples::frame::Frame();
@@ -590,11 +604,12 @@ void Task::inputPortSamples()
     base::samples::IMUSensors imu;
     base::samples::RigidBodyState orientation;
 
-    /** sizing the joints **/
-    joint.resize(jointNames.size()-1);
+    /** Sizing the joints **/
+    joint.resize(jointNames.size());
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[GetInportValue] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
+    std::cout<<"[GetInportValue] cbOrientationSamples has capacity "<<cbOrientationSamples.capacity()<<" and size "<<cbOrientationSamples.size()<<"\n";
     std::cout<<"[GetInportValue] cbImuSamples has capacity "<<cbImuSamples.capacity()<<" and size "<<cbImuSamples.size()<<"\n";
     #endif
 
@@ -675,7 +690,7 @@ void Task::inputPortSamples()
     /*****************************/
     /** Store the Joint values  **/
     /*****************************/
-    for (register int i=0; i<static_cast<int> ((joint.size()-1)); ++i)
+    for (register int i=0; i<static_cast<int> ((joint.size())); ++i)
     {
         jointsSamplesOut[i].position = joint[i].position;
     }
@@ -707,6 +722,7 @@ void Task::calculateJointsVelocities()
     for(std::vector<std::string>::const_iterator it = joints.names.begin();
         it != joints.names.end(); it++)
     {
+
         base::JointState const &joint_state(joints[*it]);
 
         /** Calculate speed in case there is not speed information **/
@@ -717,10 +733,11 @@ void Task::calculateJointsVelocities()
             #ifdef DEBUG_PRINTS
             base::Time jointsDelta_t = joints.time - prev_joints.time;
 
-            std::cout<<"[PROCESSING CALCULATING_VELO] ********************************************* \n";
-            std::cout<<"[PROCESSING CALCULATING_VELO] Encoder timestamp New: "<< joints.time.toMicroseconds() <<" Timestamp Prev: "<<prev_joints.time.toMicroseconds()<<"\n";
-            std::cout<<"[PROCESSING CALCULATING_VELO] Delta time(joints): "<< jointsDelta_t.toSeconds()<<"\n";
-            std::cout<<"[PROCESSING CALCULATING_VELO] ********************************************* \n";
+            std::cout<<"[CALCULATING_VELO] ********************************************* \n";
+            std::cout<<"[CALCULATING_VELO] Joint Name:"<<*it <<"\n";
+            std::cout<<"[CALCULATING_VELO] Encoder Timestamp New: "<< joints.time.toMicroseconds() <<" Timestamp Prev: "<<prev_joints.time.toMicroseconds()<<"\n";
+            std::cout<<"[CALCULATING_VELO] Delta time(joints): "<< jointsDelta_t.toSeconds()<<"\n";
+            std::cout<<"[CALCULATING_VELO] ********************************************* \n";
             #endif
 
             /** At least two values to perform the derivative **/
@@ -731,14 +748,15 @@ void Task::calculateJointsVelocities()
             jointsSamplesOut[jointIdx].speed = joint_state.speed;
         }
 
-        jointIdx++;
-
         #ifdef DEBUG_PRINTS
-        std::cout<<"[PROCESSING CALCULATING_VELO] ["<<jointIdx<<"] joint speed: "<< jointsSamplesOut[jointIdx].speed <<"\n";
-        std::cout<<"[PROCESSING CALCULATING_VELO] ["<<jointIdx<<"] jointsSamples old velocity: "<<(joints[jointIdx].position - prev_joints[jointIdx].position)/delta_t<<"\n";
+        std::cout<<"[CALCULATING_VELO] ["<<jointIdx<<"] joint speed: "<< jointsSamplesOut[jointIdx].speed <<"\n";
+        std::cout<<"[CALCULATING_VELO] ["<<jointIdx<<"] jointsSamples old velocity: "<<(joints[jointIdx].position - prev_joints[jointIdx].position)/delta_t<<"\n";
         #endif
 
+        jointIdx++;
     }
+
+    std::cout<<"END JOINT VELOCITIES\n";
 
     return;
 }
@@ -778,6 +796,10 @@ void Task::outputPortSamples()
         referenceOut.cov_velocity = world2navigationRbs.orientation.inverse() * (referencePoseSamples[0].cov_velocity + referencePoseSamples[1].cov_velocity);
         _reference_delta_pose_samples_out.write(referenceOut);
     }
+
+    /** Port-out the estimated world 2 navigation transform **/
+    world2navigationRbs.time = jointsSamplesOut.time;//timestamp;
+    _world_to_navigation_out.write(world2navigationRbs);
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[EXOTER OUTPUT_PORTS]: world2navigationRbs.position\n"<<world2navigationRbs.position<<"\n";
