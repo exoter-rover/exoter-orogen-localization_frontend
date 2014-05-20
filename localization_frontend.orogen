@@ -28,6 +28,14 @@ task_context "Task" do
     property('mast2tilt_link', 'double').
         doc 'Link distance between mast top point and tilt motor axle. Required to compute the mast2ptu tranformation'
 
+    property('ptu_source_frame', '/std/string').doc 'From Frame for the transformer'
+
+    property('ptu_target_frame', '/std/string').doc 'To Frame for the transformer'
+
+    property('navigation_source_frame', '/std/string').doc 'From Frame for the transformer'
+
+    property('navigation_target_frame', '/std/string').doc 'To Frame for the transformer'
+
     property('ptuNames', 'std/vector<std/string>').
 	doc 'PTU joints searching by names.'
 

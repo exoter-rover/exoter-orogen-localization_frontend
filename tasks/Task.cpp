@@ -346,7 +346,7 @@ void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base:
 void Task::ptu_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &ptu_samples_sample)
 {
     /** The transformation for the transformer **/
-    Eigen::Affine3d tf;
+    Eigen::Affine3d tf; tf.setIdentity();
     double pan_value = ptu_samples_sample.getElementByName(ptuNames[0]).position;
     double tilt_value = ptu_samples_sample.getElementByName(ptuNames[1]).position;
 
@@ -454,13 +454,13 @@ bool Task::configureHook()
 
     /** Set the initial world to navigation frame transform (transformation for transformer) **/
     world2navigationRbs.invalidate();
-    world2navigationRbs.sourceFrame = "world";
-    world2navigationRbs.targetFrame = "navigation";
+    world2navigationRbs.sourceFrame = _navigation_source_frame.get();
+    world2navigationRbs.targetFrame = _navigation_target_frame.get();
 
     /** Set the initial mast to ptu frame transform (transformation for transformer) **/
     mast2ptuRbs.invalidate();
-    mast2ptuRbs.sourceFrame = "mast";
-    mast2ptuRbs.targetFrame = "ptu";
+    mast2ptuRbs.sourceFrame = _ptu_source_frame.get();
+    mast2ptuRbs.targetFrame = _ptu_target_frame.get();
 
     /******************************************/
     /** Use properties to Configure the Task **/
