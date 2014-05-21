@@ -14,8 +14,12 @@
 #include <Eigen/StdVector> /** For STL container with Eigen types **/
 #include <Eigen/Dense> /** Algebra and transformation matrices **/
 
+/** Framework Library includes **/
+#include <localization/filters/IIR.hpp>
+
 /** Boost **/
 #include <boost/circular_buffer.hpp> /** For circular buffers **/
+#include <boost/shared_ptr.hpp> /** Shared pointers **/
 
 /** Rock libraries **/
 #include "frame_helper/FrameHelper.h" /** Rock lib for manipulate frames **/
@@ -126,12 +130,20 @@ namespace localization_frontend {
 
         std::vector<std::string> jointNames;
 
+        std::vector<std::string> iir_jointNames;
+
+        /** IIR filter configuration structure **/
+        IIRCoefficients iirConfig;
+
         /******************************************/
         /*** General Internal Storage Variables ***/
         /******************************************/
 
         /** Frame helper **/
         frame_helper::FrameHelper frameHelperLeft, frameHelperRight;
+
+        /** Bessel Low-pass IIR filter for Passive Joints */
+        boost::shared_ptr< localization::IIR<localization::NORDER_BESSEL_FILTER, 3 > > bessel;
 
         /***********************************/
         /** Input ports dependent buffers **/

@@ -20,5 +20,6 @@
   <depend package="drivers/orogen/aggregator" />
   <depend package="drivers/orogen/transformer" />
   <depend package="image_processing/frame_helper"/>
+  <depend package="slam/localization"/>
 
 </package>

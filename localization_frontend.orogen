@@ -5,6 +5,7 @@ name "localization_frontend"
 # If new data types need to be defined, they have to be put in a separate C++
 # header, and this header will be loaded here
 using_library "frame_helper" # Image Frames
+using_library "localization" # The IIR filter
 
 # If the component/deployments use data types that are defined in other oroGen
 # projects, these projects should be imported there as well.
@@ -42,6 +43,14 @@ task_context "Task" do
     property('jointNames', 'std/vector<std/string>').
 	doc 'Locomotion joints searching by names.'
 
+    #******************************
+    #*** IIR Filter Properties ****
+    #******************************
+    property('iir_filter', 'localization_frontend/IIRCoefficients').
+        doc 'Configuration values to run the Infinite Impulse Response (IIR) over the noisy passive joints. Look in Types for further details.'
+
+    property('iir_jointNames', 'std/vector<std/string>').
+	doc 'Joints in which the IIR wants to be apply. This joints names MUST be also contained in the jointNames.'
 
     #******************************
     #**** Camera Properties ********

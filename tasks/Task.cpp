@@ -447,6 +447,8 @@ bool Task::configureHook()
     proprioceptive_output_frequency = _proprioceptive_output_frequency.value();
     ptuNames = _ptuNames.value();
     jointNames = _jointNames.value();
+    iirConfig = _iir_filter.value();
+    iir_jointNames = _iir_jointNames.value();
 
     /*******************************************/
     /** Initial world to navigation transform **/
@@ -549,20 +551,35 @@ bool Task::configureHook()
     frameHelperLeft.setCalibrationParameter(_left_camera_parameters.value());
     frameHelperRight.setCalibrationParameter(_right_camera_parameters.value());
 
-    /** Information of the configuration **/
-    RTT::log(RTT::Warning)<<"[Info] Frequency of IMU samples[Hertz]: "<<(1.0/_inertial_samples_period.value())<<RTT::endlog();
-    RTT::log(RTT::Warning)<<"[Info] Frequency of Orientation samples[Hertz]: "<<(1.0/_orientation_samples_period.value())<<RTT::endlog();
-    RTT::log(RTT::Warning)<<"[Info] Frequency of Joints samples[Hertz]: "<<(1.0/_joints_samples_period.value())<<RTT::endlog();
-    RTT::log(RTT::Warning)<<"[Info] Frequency of Reference System [Hertz]: "<<(1.0/_reference_pose_samples_period.value())<<RTT::endlog();
-    RTT::log(RTT::Warning)<<"[Info] Output Frequency for Proprioceptive Inputs[Hertz]: "<<proprioceptive_output_frequency<<RTT::endlog();
+    /****************/
+    /** IIR Filter **/
+    /****************/
+    Eigen::Matrix <double, localization::NORDER_BESSEL_FILTER+1, 1> besselBCoeff, besselACoeff;
+    besselBCoeff = iirConfig.feedForwardCoeff;
+    besselACoeff = iirConfig.feedBackCoeff;
 
-    RTT::log(RTT::Warning)<<"[Info] number.jointsSamples: "<<number.jointsSamples<<RTT::endlog();
-    RTT::log(RTT::Warning)<<"[Info] number.imuSamples: "<<number.imuSamples<<RTT::endlog();
-    RTT::log(RTT::Warning)<<"[Info] number.orientationSamples: "<<number.orientationSamples<<RTT::endlog();
+    /** Create the Bessel Low-pass filter with the right coefficients **/
+    bessel.reset(new localization::IIR<localization::NORDER_BESSEL_FILTER, 3> (besselBCoeff, besselACoeff));
+
+    /** Information of the configuration **/
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of IMU samples[Hertz]: "<<(1.0/_inertial_samples_period.value())<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of Orientation samples[Hertz]: "<<(1.0/_orientation_samples_period.value())<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of Joints samples[Hertz]: "<<(1.0/_joints_samples_period.value())<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of Reference System [Hertz]: "<<(1.0/_reference_pose_samples_period.value())<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Output Frequency for Proprioceptive Inputs[Hertz]: "<<proprioceptive_output_frequency<<RTT::endlog();
+
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.jointsSamples: "<<number.jointsSamples<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.imuSamples: "<<number.imuSamples<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.orientationSamples: "<<number.orientationSamples<<RTT::endlog();
+
+    if (iirConfig.iirOn)
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Infinite Impulse Response Filter [ON]"<<RTT::endlog();
+    else
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Infinite Impulse Response Filter [OFF]"<<RTT::endlog();
 
     if ((number.jointsSamples == 0)||(number.imuSamples == 0))
     {
-        RTT::log(RTT::Warning)<<"[FATAL ERROR] Output frequency cannot be higher than sensors frequency."<<RTT::endlog();
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] Output frequency cannot be higher than sensors frequency."<<RTT::endlog();
         return false;
     }
 
@@ -600,12 +617,13 @@ void Task::inputPortSamples()
     unsigned int cbOrientationSize = cbOrientationSamples.size();
 
     /** Local variable of the ports **/
-    base::samples::Joints joint;
+    base::samples::Joints joint, iir_joint;
     base::samples::IMUSensors imu;
     base::samples::RigidBodyState orientation;
 
     /** Sizing the joints **/
     joint.resize(jointNames.size());
+    iir_joint.resize(iir_jointNames.size());
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[GetInportValue] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
@@ -616,6 +634,20 @@ void Task::inputPortSamples()
     /** ********* **/
     /**  Joints   **/
     /** ********* **/
+
+    /** Bessel IIR Low-pass filter of the linear cartesianVelocities
+     * from the Motion Model **/
+    if (iirConfig.iirOn)
+    {
+       // Eigen::Matrix<double, 3, 1> velocity = cartesianVelocities.block<3, 1>(0,0);
+       // Eigen::Matrix<double, 3, 3> velocityCov = cartesianVelCov.block<3, 3>(0,0);
+       // cartesianVelocities.block<3, 1>(0,0) = this->bessel->perform(velocity, velocityCov, false);
+
+       // /** Store the filtered velocity uncertainty (Uncertainty propagation is time-correlated by the IIR) **/
+       // cartesianVelCov.block<3, 3>(0,0) = velocityCov;
+    }
+
+
 
     /** Process the buffer **/
     for (register size_t j = 0; j<joint.size(); ++j)
