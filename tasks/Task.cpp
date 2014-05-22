@@ -559,7 +559,7 @@ bool Task::configureHook()
     besselACoeff = iirConfig.feedBackCoeff;
 
     /** Create the Bessel Low-pass filter with the right coefficients **/
-    bessel.reset(new localization::IIR<localization::NORDER_BESSEL_FILTER, 3> (besselBCoeff, besselACoeff));
+    bessel.reset(new localization::IIR<localization::NORDER_BESSEL_FILTER, IIR_FILTER_VECTOR_SIZE> (besselBCoeff, besselACoeff));
 
     /** Information of the configuration **/
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of IMU samples[Hertz]: "<<(1.0/_inertial_samples_period.value())<<RTT::endlog();
@@ -576,6 +576,21 @@ bool Task::configureHook()
         RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Infinite Impulse Response Filter [ON]"<<RTT::endlog();
     else
         RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Infinite Impulse Response Filter [OFF]"<<RTT::endlog();
+
+    if (iir_jointNames.size() != IIR_FILTER_VECTOR_SIZE)
+    {
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] The number of joints to perform the filter has to be "<<IIR_FILTER_VECTOR_SIZE<<RTT::endlog();
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] Otherwise change the IIR_FILTER_VECTOR_SIZE constant in the code."<<RTT::endlog();
+        return false;
+    }
+
+    for(std::vector<std::string>::const_iterator it_name = iir_jointNames.begin(); it_name != iir_jointNames.end(); it_name++)
+    {
+        std::vector<std::string>::const_iterator it = find(jointNames.begin(), jointNames.end(), *it_name);
+        if (it == jointNames.end())
+            throw std::runtime_error("[Localization Front-End] [FATAL ERROR]: Joints names for IIR filter must be contained in all joints names property.");
+    }
+
 
     if ((number.jointsSamples == 0)||(number.imuSamples == 0))
     {
@@ -617,13 +632,12 @@ void Task::inputPortSamples()
     unsigned int cbOrientationSize = cbOrientationSamples.size();
 
     /** Local variable of the ports **/
-    base::samples::Joints joint, iir_joint;
+    base::samples::Joints joint;
     base::samples::IMUSensors imu;
     base::samples::RigidBodyState orientation;
 
     /** Sizing the joints **/
     joint.resize(jointNames.size());
-    iir_joint.resize(iir_jointNames.size());
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[GetInportValue] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
@@ -634,20 +648,6 @@ void Task::inputPortSamples()
     /** ********* **/
     /**  Joints   **/
     /** ********* **/
-
-    /** Bessel IIR Low-pass filter of the linear cartesianVelocities
-     * from the Motion Model **/
-    if (iirConfig.iirOn)
-    {
-       // Eigen::Matrix<double, 3, 1> velocity = cartesianVelocities.block<3, 1>(0,0);
-       // Eigen::Matrix<double, 3, 3> velocityCov = cartesianVelCov.block<3, 3>(0,0);
-       // cartesianVelocities.block<3, 1>(0,0) = this->bessel->perform(velocity, velocityCov, false);
-
-       // /** Store the filtered velocity uncertainty (Uncertainty propagation is time-correlated by the IIR) **/
-       // cartesianVelCov.block<3, 3>(0,0) = velocityCov;
-    }
-
-
 
     /** Process the buffer **/
     for (register size_t j = 0; j<joint.size(); ++j)
@@ -670,9 +670,39 @@ void Task::inputPortSamples()
         /** Set the time **/
         joint.time = (cbJointsSamples[cbJointsSize-1].time + cbJointsSamples[0].time)/2.0;
 
+        /** ****** **/
+        /**  IIR   **/
+        /** ****** **/
+
+        /** Bessel IIR Low-pass **/
+        if (iirConfig.iirOn)
+        {
+            /** Get the IIR joints **/
+            register int idx = 0;
+            Eigen::Matrix<double, IIR_FILTER_VECTOR_SIZE, 1> iir_jointVector;
+            for(std::vector<std::string>::const_iterator it = iir_jointNames.begin(); it != iir_jointNames.end(); it++)
+            {
+                iir_jointVector[idx] = joint.getElementByName(*it).position;
+                idx++;
+            }
+
+            /** Filter step **/
+            iir_jointVector = this->bessel->perform(iir_jointVector);
+
+            /** Set the filtered joints **/
+            idx = 0;
+            for(std::vector<std::string>::const_iterator it = iir_jointNames.begin(); it != iir_jointNames.end(); it++)
+            {
+                joint[*it].position = iir_jointVector[idx];
+                idx++;
+            }
+        }
+
+
         /** Push the result in the buffer **/
         jointsSamples.push_front(joint);
     }
+
 
     /** ******************* **/
     /** Orientation samples **/

@@ -101,6 +101,7 @@ namespace localization_frontend {
 
     protected:
         static const int  DEFAULT_CIRCULAR_BUFFER_SIZE = 2; /** Default number of objects to store regarding the inputs port **/
+        static const unsigned int  IIR_FILTER_VECTOR_SIZE = 3; /** Number of elements in the IIR filter **/
 
     protected:
 
@@ -143,7 +144,7 @@ namespace localization_frontend {
         frame_helper::FrameHelper frameHelperLeft, frameHelperRight;
 
         /** Bessel Low-pass IIR filter for Passive Joints */
-        boost::shared_ptr< localization::IIR<localization::NORDER_BESSEL_FILTER, 3 > > bessel;
+        boost::shared_ptr< localization::IIR<localization::NORDER_BESSEL_FILTER, IIR_FILTER_VECTOR_SIZE > > bessel;
 
         /***********************************/
         /** Input ports dependent buffers **/

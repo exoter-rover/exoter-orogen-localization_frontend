@@ -50,7 +50,8 @@ task_context "Task" do
         doc 'Configuration values to run the Infinite Impulse Response (IIR) over the noisy passive joints. Look in Types for further details.'
 
     property('iir_jointNames', 'std/vector<std/string>').
-	doc 'Joints in which the IIR wants to be apply. This joints names MUST be also contained in the jointNames.'
+	doc 'Joints in which the IIR wants to be apply. These joints names MUST be also contained in the jointNames. '+
+        'Maximum number of three joints. In case more joints are required you need to change the code due to template classes. IIR_FILTER_VECTOR_SIZE'
 
     #******************************
     #**** Camera Properties ********
