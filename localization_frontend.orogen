@@ -103,8 +103,8 @@ task_context "Task" do
     # to compute the sensor output in body frame.
     ##############################################
     transformer do
-	transform "body", "imu" # body to imu in transformation convention (pbody = Tbody2imu pimu)
-        transform "body", "laser" # body to laser (tof or lidar) in transformation (pbody = Tbody2laser * plaser)
+	transform "imu", "body" # imu to body in "Source in target" convention
+        transform "laser", "body" # laser to body in "Source in target" convention
 	align_port("joints_samples", 0.04)
 	align_port("ptu_samples", 0.04)
 	align_port("inertial_samples", 0.04)

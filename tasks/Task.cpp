@@ -152,11 +152,11 @@ void Task::inertial_samplesTransformerCallback(const base::Time &ts, const ::bas
     Eigen::Affine3d tf; /** Transformer transformation **/
     Eigen::Quaternion <double> qtf; /** Rotation part of the transformation in quaternion form **/
 
-    /** Get the transformation (transformation) Tbody_imu**/
-    if (!_body2imu.get(ts, tf, false))
+    /** Get the transformation (transformation) Tbody_imu which is body = Tbody_imu imu **/
+    if (!_imu2body.get(ts, tf, false))
 	return;
 
-    qtf = Eigen::Quaternion <double> (tf.rotation());//!Quaternion from Body to imu
+    qtf = Eigen::Quaternion <double> (tf.rotation());//!Quaternion from Body to imu (transforming samples from imu to body)
 
     base::samples::IMUSensors imusample;
 
@@ -203,10 +203,10 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
     Eigen::Quaternion <double> qtf; /** Rotation of the transformation in quaternion form **/
 
     /** Get the transformation (transformation) Tbody_imu**/
-    if (!_body2imu.get(ts, tf, false))
+    if (!_imu2body.get(ts, tf, false))
 	return;
 
-    qtf = Eigen::Quaternion <double> (tf.rotation());//!Quaternion from Body to imu
+    qtf = Eigen::Quaternion <double> (tf.rotation());//!Quaternion from Body to imu (transforming samples from imu to body)
 
     #ifdef DEBUG_PRINTS
     std::cout<<"** [EXOTER ORIENTATION_SAMPLES] counter.orientationSamples("<<counter.orientationSamples<<") at ("<<orientation_samples_sample.time.toMicroseconds()<< ")**\n";
@@ -406,8 +406,8 @@ void Task::point_cloud_samplesTransformerCallback(const base::Time &ts, const ::
     /** Get the transformation from the transformer **/
     Eigen::Affine3d tf;
 
-    /** Get the transformation (transformation) Tbody_laser**/
-    if(!_body2laser.get( ts, tf ))
+    /** Get the transformation (transformation) Tbody_laser which transforms laser pints two body points **/
+    if(!_laser2body.get( ts, tf ))
     {
         RTT::log(RTT::Warning)<<"[ EXOTER POINT CLOUD FATAL ERROR] No transformation provided for the transformer."<<RTT::endlog();
         return;
