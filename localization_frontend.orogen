@@ -26,21 +26,11 @@ task_context "Task" do
     property('proprioceptive_output_frequency', 'double').
         doc 'Output frequency of the proprioceptive sensors (joints, inertial sensors and orientation).'
 
-    property('mast2tilt_link', 'double').
-        doc 'Link distance between mast top point and tilt motor axle. Required to compute the mast2ptu tranformation'
-
-    property('ptu_source_frame', '/std/string').doc 'From Frame for the transformer'
-
-    property('ptu_target_frame', '/std/string').doc 'To Frame for the transformer'
-
     property('navigation_source_frame', '/std/string').doc 'From Frame for the transformer'
 
     property('navigation_target_frame', '/std/string').doc 'To Frame for the transformer'
 
-    property('ptuNames', 'std/vector<std/string>').
-	doc 'PTU joints searching by names.'
-
-    property('jointNames', 'std/vector<std/string>').
+   property('jointNames', 'std/vector<std/string>').
 	doc 'Locomotion joints searching by names.'
 
     #******************************
@@ -70,10 +60,6 @@ task_context "Task" do
     input_port('joints_samples', '/base/samples/Joints').
         needs_reliable_connection.
 	doc 'Timestamped robot joints.'
-
-    input_port('ptu_samples', '/base/samples/Joints').
-        needs_reliable_connection.
-	doc 'Timestamped robot PTU joints status'
 
     input_port('inertial_samples', '/base/samples/IMUSensors').
         needs_reliable_connection.
@@ -106,7 +92,6 @@ task_context "Task" do
 	transform "imu", "body" # imu to body in "Source in target" convention
         transform "laser", "body" # laser to body in "Source in target" convention
 	align_port("joints_samples", 0.04)
-	align_port("ptu_samples", 0.04)
 	align_port("inertial_samples", 0.04)
 	align_port("orientation_samples", 0.008)
 	align_port("left_frame", 0.5)
@@ -146,10 +131,6 @@ task_context "Task" do
 
     output_port('world_to_navigation_out', 'base/samples/RigidBodyState').
 	doc 'Transformation for the transformer: navigation frame (initial starting point) expressed in the world frame.'
-
-    output_port('mast_to_ptu_out', 'base/samples/RigidBodyState').
-	doc 'Transformation for the transformer: Pan and Tilt Unit frame expressed in the mast frame.'
-
 
     #**********************************
     #******* Output Debug Ports *******

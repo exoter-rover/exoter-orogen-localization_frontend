@@ -32,7 +32,6 @@ Task::Task(std::string const& name)
     /***************************/
     world2navigationRbs.invalidate();
     referenceOut.invalidate();
-    mast2ptuRbs.invalidate();
 
     /**********************************/
     /*** Internal Storage Variables ***/
@@ -343,26 +342,6 @@ void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base:
 
 }
 
-void Task::ptu_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &ptu_samples_sample)
-{
-    /** The transformation for the transformer **/
-    Eigen::Affine3d tf; tf.setIdentity();
-    double pan_value = ptu_samples_sample.getElementByName(ptuNames[0]).position;
-    double tilt_value = ptu_samples_sample.getElementByName(ptuNames[1]).position;
-
-    tf = Eigen::Quaternion <double>(Eigen::AngleAxisd(pan_value, Eigen::Vector3d::UnitZ()));
-    tf.translation() = Eigen::Vector3d (0.00, 0.00, _mast2tilt_link.value());
-    tf = tf * Eigen::Affine3d (Eigen::AngleAxisd(tilt_value, Eigen::Vector3d::UnitY()));
-
-    mast2ptuRbs.time = ptu_samples_sample.time;
-    mast2ptuRbs.setTransform(tf);
-
-    /** Write the PTU transformation into the port **/
-    _mast_to_ptu_out.write(mast2ptuRbs);
-
-    return;
-}
-
 void Task::left_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &left_frame_sample)
 {
     #ifdef DEBUG_PRINTS
@@ -445,7 +424,6 @@ bool Task::configureHook()
     /** Read configuration **/
     /************************/
     proprioceptive_output_frequency = _proprioceptive_output_frequency.value();
-    ptuNames = _ptuNames.value();
     jointNames = _jointNames.value();
     iirConfig = _iir_filter.value();
     iir_jointNames = _iir_jointNames.value();
@@ -458,11 +436,6 @@ bool Task::configureHook()
     world2navigationRbs.invalidate();
     world2navigationRbs.sourceFrame = _navigation_source_frame.get();
     world2navigationRbs.targetFrame = _navigation_target_frame.get();
-
-    /** Set the initial mast to ptu frame transform (transformation for transformer) **/
-    mast2ptuRbs.invalidate();
-    mast2ptuRbs.sourceFrame = _ptu_source_frame.get();
-    mast2ptuRbs.targetFrame = _ptu_target_frame.get();
 
     /******************************************/
     /** Use properties to Configure the Task **/

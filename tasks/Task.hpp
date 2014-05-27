@@ -127,8 +127,6 @@ namespace localization_frontend {
 
         double proprioceptive_output_frequency;
 
-        std::vector<std::string> ptuNames;
-
         std::vector<std::string> jointNames;
 
         std::vector<std::string> iir_jointNames;
@@ -177,9 +175,6 @@ namespace localization_frontend {
         /** Calculated initial navigation frame pose expressed in world frame */
         base::samples::RigidBodyState world2navigationRbs;
 
-        /** Calculated Pan and Tilt Unit transformation */
-        base::samples::RigidBodyState mast2ptuRbs;
-
         /** Undistorted camera images **/
         RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> leftFrame;
         RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> rightFrame;
@@ -197,8 +192,6 @@ namespace localization_frontend {
         virtual void orientation_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &orientation_samples_sample);
 
         virtual void joints_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample);
-
-        virtual void ptu_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &ptu_samples_sample);
 
         virtual void left_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &left_frame_sample);
 
