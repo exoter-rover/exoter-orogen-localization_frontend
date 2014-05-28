@@ -69,10 +69,6 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 
     if (!initPosition)
     {
-        /** Initial position state **/
-        if (state() != INITIAL_POSITIONING)
-            state(INITIAL_POSITIONING);
-
         /** Set position **/
         world2navigationRbs.position = referencePoseSamples[0].position;
         world2navigationRbs.orientation = referencePoseSamples[0].orientation;
@@ -220,10 +216,6 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 
     if(!initAttitude)
     {
-        /** Initial position state **/
-        if (state() != INITIAL_POSITIONING)
-            state(INITIAL_POSITIONING);
-
         Eigen::Quaterniond attitude = cbOrientationSamples[0].orientation;
 
         /** Check if there is initial pose connected **/
@@ -571,6 +563,7 @@ bool Task::configureHook()
         return false;
     }
 
+
     return true;
 }
 
@@ -582,6 +575,13 @@ bool Task::startHook()
 }
 void Task::updateHook()
 {
+    /** Initial position state **/
+    if (state() != INITIAL_POSITIONING)
+    {
+        if (!initPosition && !initAttitude)
+            state(INITIAL_POSITIONING);
+    }
+
     TaskBase::updateHook();
 }
 void Task::errorHook()
