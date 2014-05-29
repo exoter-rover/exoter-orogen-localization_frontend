@@ -344,7 +344,7 @@ void Task::left_frameTransformerCallback(const base::Time &ts, const ::RTT::extr
     ::base::samples::frame::Frame *frame_ptr = leftFrame.write_access();
     frame_ptr->time = left_frame_sample->time;
     frame_ptr->init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), left_frame_sample->getFrameMode());
-    frameHelperLeft.undistort(*left_frame_sample, *frame_ptr);
+    frameHelperLeft.convert(*left_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
     leftFrame.reset(frame_ptr);
 
     /** Write the camera frame into the port **/
@@ -363,7 +363,7 @@ void Task::right_frameTransformerCallback(const base::Time &ts, const ::RTT::ext
     ::base::samples::frame::Frame *frame_ptr = rightFrame.write_access();
     frame_ptr->time = right_frame_sample->time;
     frame_ptr->init(right_frame_sample->size.width, right_frame_sample->size.height, right_frame_sample->getDataDepth(), right_frame_sample->getFrameMode());
-    frameHelperRight.undistort(*right_frame_sample, *frame_ptr);
+    frameHelperRight.convert(*right_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
     rightFrame.reset(frame_ptr);
 
     /** Write the camera frame into the port **/
