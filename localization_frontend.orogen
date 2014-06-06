@@ -30,7 +30,11 @@ task_context "Task" do
 
     property('navigation_target_frame', '/std/string').doc 'To Frame for the transformer'
 
-   property('jointNames', 'std/vector<std/string>').
+    property('reference_source_frame', '/std/string').doc 'From Frame for the transformer'
+
+    property('reference_target_frame', '/std/string').doc 'To Frame for the transformer'
+
+    property('jointNames', 'std/vector<std/string>').
 	doc 'Locomotion joints searching by names.'
 
     #******************************
@@ -128,6 +132,9 @@ task_context "Task" do
 
     output_port('reference_delta_pose_samples_out', 'base/samples/RigidBodyState').
 	doc 'Delta pose and velocities computed from the ground truth system.'
+
+    output_port('world_osg_to_world_out', 'base/samples/RigidBodyState').
+	doc 'Transformation for the transformer: world_osg frame (origin in visualization) expressed in the estimated world frame (North-East-Up).'
 
     output_port('world_to_navigation_out', 'base/samples/RigidBodyState').
 	doc 'Transformation for the transformer: navigation frame (initial starting point) expressed in the world frame.'

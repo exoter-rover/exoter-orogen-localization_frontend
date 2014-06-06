@@ -9,7 +9,7 @@
 #define R2D 180.00/M_PI /** Convert radian to degree **/
 #endif
 
-//#define DEBUG_PRINTS 1
+#define DEBUG_PRINTS 1
 
 using namespace localization_frontend;
 
@@ -137,6 +137,16 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 	world2navigationRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
 		
 	initPosition = true;
+    }
+    else
+    {
+        /** Set the reference pose with respect to the navigation_source_frame **/
+        referencePoseSamples[0].position -= world2navigationRbs.position; //position navigation_body = world_body - wold_navigation
+        referencePoseSamples[0].orientation = world2navigationRbs.orientation.inverse() * referencePoseSamples[0].orientation; //navigation_body = navigation_world * world_body
+
+        /** Put the new names **/
+        referencePoseSamples[0].sourceFrame = _reference_source_frame.value();
+        referencePoseSamples[0].targetFrame = _reference_target_frame.value();
     }
 
    flag.referencePoseSamples = true;
