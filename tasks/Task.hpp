@@ -15,7 +15,7 @@
 #include <Eigen/Dense> /** Algebra and transformation matrices **/
 
 /** Framework Library includes **/
-#include <localization/filters/IIR.hpp>
+#include <localization/filters/FIR.hpp>
 
 /** Boost **/
 #include <boost/circular_buffer.hpp> /** For circular buffers **/
@@ -101,7 +101,8 @@ namespace localization_frontend {
 
     protected:
         static const int  DEFAULT_CIRCULAR_BUFFER_SIZE = 2; /** Default number of objects to store regarding the inputs port **/
-        static const unsigned int  IIR_FILTER_VECTOR_SIZE = 3; /** Number of elements in the IIR filter **/
+        static const unsigned int  FILTER_ORDER = 25; /** FIR filter Order **/
+        static const unsigned int  FILTER_VECTOR_SIZE = 3; /** Vector dimension in the FIR filter **/
 
     protected:
 
@@ -129,10 +130,10 @@ namespace localization_frontend {
 
         std::vector<std::string> jointNames;
 
-        std::vector<std::string> iir_jointNames;
+        std::vector<std::string> filter_jointNames;
 
-        /** IIR filter configuration structure **/
-        IIRCoefficients iirConfig;
+        /** FIR filter configuration structure **/
+        FilterCoefficients filterConfig;
 
         /******************************************/
         /*** General Internal Storage Variables ***/
@@ -141,8 +142,8 @@ namespace localization_frontend {
         /** Frame helper **/
         frame_helper::FrameHelper frameHelperLeft, frameHelperRight;
 
-        /** Bessel Low-pass IIR filter for Passive Joints */
-        boost::shared_ptr< localization::IIR<localization::NORDER_BESSEL_FILTER, IIR_FILTER_VECTOR_SIZE > > bessel;
+        /** Low-pass filter for Passive Joints */
+        boost::shared_ptr< localization::FIR<FILTER_ORDER, FILTER_VECTOR_SIZE > > low_pass_filter;
 
         /***********************************/
         /** Input ports dependent buffers **/
@@ -174,6 +175,9 @@ namespace localization_frontend {
 
         /** Calculated initial navigation frame pose expressed in world frame */
         base::samples::RigidBodyState world2navigationRbs;
+
+        /** Calculated the world_osg to intermediate world frame */
+        base::samples::RigidBodyState world_osg2worldRbs;
 
         /** Undistorted camera images **/
         RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> leftFrame;

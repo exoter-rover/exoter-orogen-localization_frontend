@@ -31,6 +31,7 @@ Task::Task(std::string const& name)
     /** Output port variables **/
     /***************************/
     world2navigationRbs.invalidate();
+    world_osg2worldRbs.invalidate();
     referenceOut.invalidate();
 
     /**********************************/
@@ -89,46 +90,6 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 	std::cout<<"** Roll: "<<euler[0]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[2]*R2D<<"\n";
 	#endif
 
-	/** Initial attitude from IMU acceleration has been already calculated **/
-	if (initAttitude)
-	{
-	    Eigen::Matrix <double,3,1> euler; /** In Euler angles **/
-            Eigen::Quaternion <double> attitude = world2navigationRbs.orientation; /** Initial attitude from accelerometers has been already calculated **/
-	
-	    /** Get the initial Yaw from the initial Pose and the pitch and roll from accelerometers **/
-	    euler[2] = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];//YAW
-	    euler[1] = attitude.toRotationMatrix().eulerAngles(2,1,0)[1];//PITCH
-	    euler[0] = attitude.toRotationMatrix().eulerAngles(2,1,0)[2];//ROLL
-	
-            /** Check the Initial attitude */
-            if (base::isNaN<double>(euler[2]))
-            {
-                RTT::log(RTT::Fatal)<<"[FATAL ERROR]  Initial Heading from External Reference is NaN."<<RTT::endlog();
-                RTT::log(RTT::Fatal)<<"[FATAL ERROR]  Heading is set to Zero instead."<<RTT::endlog();
-                euler[2] = 0.00;
-            }
-            if (base::isNaN<double>(euler[0]) || base::isNaN<double>(euler[1]))
-            {
-                throw std::runtime_error("[FATAL ERROR]: Attitude cannot be Not a Number (NaN)");
-                return exception(NAN_ERROR);
-            }
-
-
-	    /** Set the initial attitude with the Yaw provided from the initial pose **/
-	    attitude = Eigen::Quaternion <double> (Eigen::AngleAxisd(euler[2], Eigen::Vector3d::UnitZ())*
-	        Eigen::AngleAxisd(euler[1], Eigen::Vector3d::UnitY()) *
-                Eigen::AngleAxisd(euler[0], Eigen::Vector3d::UnitX()));
-	
-	    /** Store the value as the initial one for the world2navigationRbs **/
-	    world2navigationRbs.orientation = attitude;
-	
-	    #ifdef DEBUG_PRINTS
-            std::cout<< "[EXOTER REFERENCE-POSE]\n";
-	    std::cout<< "******** Initial Attitude in Pose Init Samples *******"<<"\n";
-	    std::cout<< "Init Roll: "<<euler[0]*R2D<<"Init Pitch: "<<euler[1]*R2D<<"Init Yaw: "<<euler[2]*R2D<<"\n";
-	    #endif
-	}
-	
 	/** Initial angular velocity **/
 	world2navigationRbs.angular_velocity.setZero();
 	
@@ -137,16 +98,6 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 	world2navigationRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
 		
 	initPosition = true;
-    }
-    else
-    {
-        /** Set the reference pose with respect to the navigation_source_frame **/
-        referencePoseSamples[0].position -= world2navigationRbs.position; //position navigation_body = world_body - wold_navigation
-        referencePoseSamples[0].orientation = world2navigationRbs.orientation.inverse() * referencePoseSamples[0].orientation; //navigation_body = navigation_world * world_body
-
-        /** Put the new names **/
-        referencePoseSamples[0].sourceFrame = _reference_source_frame.value();
-        referencePoseSamples[0].targetFrame = _reference_target_frame.value();
     }
 
    flag.referencePoseSamples = true;
@@ -231,13 +182,32 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
         /** Check if there is initial pose connected **/
         if (_reference_pose_samples.connected() && initPosition)
         {
-            /** Alternative method: Align the yaw from the referencePoseSamples Yaw **/
-            attitude = Eigen::Quaternion <double>(Eigen::AngleAxisd(referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0], Eigen::Vector3d::UnitZ())) * attitude;
+            double heading = 0.00;
+
+            /** Check if the reference pose has a valid orientation **/
+            if(base::samples::RigidBodyState::isValidValue(referencePoseSamples[0].orientation))
+            {
+                heading = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];
+            }
+            else
+            {
+                RTT::log(RTT::Warning)<<"Initial Heading from External Reference is not Valid."<<RTT::endlog();
+            }
+
+            std::cout<<"********** Heading: "<<heading<<"\n";
+
+            /** Align the Yaw from the referencePoseSamples, Pitch and Roll from orientationSamples **/
+            attitude = Eigen::Quaternion <double>(
+                    Eigen::AngleAxisd(heading, Eigen::Vector3d::UnitZ())*
+                    Eigen::AngleAxisd(attitude.toRotationMatrix().eulerAngles(2,1,0)[1], Eigen::Vector3d::UnitY()) *
+                    Eigen::AngleAxisd(attitude.toRotationMatrix().eulerAngles(2,1,0)[2], Eigen::Vector3d::UnitX()));
 
             attitude.normalize();
 
-            initAttitude = true;
+            /** Compute the world_osg to world frame **/
+            world_osg2worldRbs.orientation = attitude *  cbOrientationSamples[0].orientation.inverse();
 
+            initAttitude = true;
         }
         else if (!_reference_pose_samples.connected())
         {
@@ -247,6 +217,9 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             /** Assume well known starting position **/
             world2navigationRbs.cov_position = Eigen::Matrix <double, 3 , 3>::Zero();
             world2navigationRbs.cov_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
+
+            /** Compute the world_osg to world frame **/
+            world_osg2worldRbs.orientation.setIdentity();
 
             initPosition = true;
             initAttitude = true;
@@ -263,6 +236,15 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             world2navigationRbs.cov_orientation = Eigen::Matrix <double, 3 , 3>::Zero();
             world2navigationRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
 
+            /** Position for the world_osg to world **/
+            world_osg2worldRbs.position.setZero();
+
+            /** Assume very well know initial attitude **/
+            world_osg2worldRbs.cov_position = Eigen::Matrix <double, 3 , 3>::Zero();
+            world_osg2worldRbs.cov_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
+            world_osg2worldRbs.cov_orientation = Eigen::Matrix <double, 3 , 3>::Zero();
+            world_osg2worldRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
+
             #ifdef DEBUG_PRINTS
             Eigen::Vector3d euler;
             euler[2] = attitude.toRotationMatrix().eulerAngles(2,1,0)[0];//YAW
@@ -272,6 +254,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             std::cout<< "******** Initial Attitude *******"<<"\n";
             std::cout<< "Roll: "<<euler[0]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[2]*R2D<<"\n";
             #endif
+
 
             if (initPosition)
             {
@@ -427,8 +410,8 @@ bool Task::configureHook()
     /************************/
     proprioceptive_output_frequency = _proprioceptive_output_frequency.value();
     jointNames = _jointNames.value();
-    iirConfig = _iir_filter.value();
-    iir_jointNames = _iir_jointNames.value();
+    filterConfig = _filter_config.value();
+    filter_jointNames = _filter_jointNames.value();
 
     /*******************************************/
     /** Initial world to navigation transform **/
@@ -438,6 +421,13 @@ bool Task::configureHook()
     world2navigationRbs.invalidate();
     world2navigationRbs.sourceFrame = _navigation_source_frame.get();
     world2navigationRbs.targetFrame = _navigation_target_frame.get();
+
+    /******************************************/
+    /** Initial world_osg to world transform **/
+    /******************************************/
+    world_osg2worldRbs.invalidate();
+    world_osg2worldRbs.sourceFrame = _world_source_frame.get();
+    world_osg2worldRbs.targetFrame = _world_target_frame.get();
 
     /******************************************/
     /** Use properties to Configure the Task **/
@@ -526,15 +516,14 @@ bool Task::configureHook()
     frameHelperLeft.setCalibrationParameter(_left_camera_parameters.value());
     frameHelperRight.setCalibrationParameter(_right_camera_parameters.value());
 
-    /****************/
-    /** IIR Filter **/
-    /****************/
-    Eigen::Matrix <double, localization::NORDER_BESSEL_FILTER+1, 1> besselBCoeff, besselACoeff;
-    besselBCoeff = iirConfig.feedForwardCoeff;
-    besselACoeff = iirConfig.feedBackCoeff;
+    /*********************/
+    /** Low-Pass Filter **/
+    /*********************/
+    Eigen::Matrix <double, FILTER_ORDER+1, 1> bCoeff;
+    bCoeff =  filterConfig.feedForwardCoeff;
 
-    /** Create the Bessel Low-pass filter with the right coefficients **/
-    bessel.reset(new localization::IIR<localization::NORDER_BESSEL_FILTER, IIR_FILTER_VECTOR_SIZE> (besselBCoeff, besselACoeff));
+    /** Create the Low-pass filter with the right coefficients **/
+    low_pass_filter.reset(new localization::FIR<FILTER_ORDER, FILTER_VECTOR_SIZE> (bCoeff));
 
     /** Information of the configuration **/
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of IMU samples[Hertz]: "<<(1.0/_inertial_samples_period.value())<<RTT::endlog();
@@ -547,23 +536,23 @@ bool Task::configureHook()
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.imuSamples: "<<number.imuSamples<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.orientationSamples: "<<number.orientationSamples<<RTT::endlog();
 
-    if (iirConfig.iirOn)
-        RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Infinite Impulse Response Filter [ON]"<<RTT::endlog();
+    if (filterConfig.filterOn)
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Low-Pass Filter [ON]"<<RTT::endlog();
     else
-        RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Infinite Impulse Response Filter [OFF]"<<RTT::endlog();
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Low-Pass Filter [OFF]"<<RTT::endlog();
 
-    if (iir_jointNames.size() != IIR_FILTER_VECTOR_SIZE)
+    if (filter_jointNames.size() != FILTER_VECTOR_SIZE)
     {
-        RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] The number of joints to perform the filter has to be "<<IIR_FILTER_VECTOR_SIZE<<RTT::endlog();
-        RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] Otherwise change the IIR_FILTER_VECTOR_SIZE constant in the code."<<RTT::endlog();
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] The number of joints to perform the filter has to be "<<FILTER_VECTOR_SIZE<<RTT::endlog();
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] Otherwise change the FILTER_VECTOR_SIZE constant in the code."<<RTT::endlog();
         return false;
     }
 
-    for(std::vector<std::string>::const_iterator it_name = iir_jointNames.begin(); it_name != iir_jointNames.end(); it_name++)
+    for(std::vector<std::string>::const_iterator it_name = filter_jointNames.begin(); it_name != filter_jointNames.end(); it_name++)
     {
         std::vector<std::string>::const_iterator it = find(jointNames.begin(), jointNames.end(), *it_name);
         if (it == jointNames.end())
-            throw std::runtime_error("[Localization Front-End] [FATAL ERROR]: Joints names for IIR filter must be contained in all joints names property.");
+            throw std::runtime_error("[Localization Front-End] [FATAL ERROR]: Joints names for filter must be contained in all joints names property.");
     }
 
 
@@ -654,29 +643,29 @@ void Task::inputPortSamples()
         joint.time = (cbJointsSamples[cbJointsSize-1].time + cbJointsSamples[0].time)/2.0;
 
         /** ****** **/
-        /**  IIR   **/
+        /**  FILTER   **/
         /** ****** **/
 
-        /** Bessel IIR Low-pass **/
-        if (iirConfig.iirOn)
+        /** Low-pass Filter **/
+        if (filterConfig.filterOn)
         {
-            /** Get the IIR joints **/
+            /** Get the joints to filter **/
             register int idx = 0;
-            Eigen::Matrix<double, IIR_FILTER_VECTOR_SIZE, 1> iir_jointVector;
-            for(std::vector<std::string>::const_iterator it = iir_jointNames.begin(); it != iir_jointNames.end(); it++)
+            Eigen::Matrix<double, FILTER_VECTOR_SIZE, 1> filter_jointVector;
+            for(std::vector<std::string>::const_iterator it = filter_jointNames.begin(); it != filter_jointNames.end(); it++)
             {
-                iir_jointVector[idx] = joint.getElementByName(*it).position;
+                filter_jointVector[idx] = joint.getElementByName(*it).position;
                 idx++;
             }
 
             /** Filter step **/
-            iir_jointVector = this->bessel->perform(iir_jointVector);
+            filter_jointVector = this->low_pass_filter->perform(filter_jointVector);
 
             /** Set the filtered joints **/
             idx = 0;
-            for(std::vector<std::string>::const_iterator it = iir_jointNames.begin(); it != iir_jointNames.end(); it++)
+            for(std::vector<std::string>::const_iterator it = filter_jointNames.begin(); it != filter_jointNames.end(); it++)
             {
-                joint[*it].position = iir_jointVector[idx];
+                joint[*it].position = filter_jointVector[idx];
                 idx++;
             }
         }
@@ -801,8 +790,6 @@ void Task::calculateJointsVelocities()
         jointIdx++;
     }
 
-    std::cout<<"END JOINT VELOCITIES\n";
-
     return;
 }
 
@@ -845,6 +832,10 @@ void Task::outputPortSamples()
     /** Port-out the estimated world 2 navigation transform **/
     world2navigationRbs.time = jointsSamplesOut.time;//timestamp;
     _world_to_navigation_out.write(world2navigationRbs);
+
+    /** Port-out the estimated world_osg 2 world transform **/
+    world_osg2worldRbs.time = jointsSamplesOut.time;//timestamp;
+    _world_osg_to_world_out.write(world_osg2worldRbs);
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[EXOTER OUTPUT_PORTS]: world2navigationRbs.position\n"<<world2navigationRbs.position<<"\n";

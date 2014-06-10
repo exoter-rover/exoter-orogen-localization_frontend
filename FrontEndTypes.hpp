@@ -7,12 +7,12 @@
 
 namespace localization_frontend
 {
-    /** Coefficient for the IIR filter **/
-    struct IIRCoefficients
+    /** Coefficient for the filter **/
+    struct FilterCoefficients
     {
-        bool iirOn; /** Set to true if want to use it with the following coefficients **/
-        base::VectorXd feedForwardCoeff;
-        base::VectorXd feedBackCoeff;
+        bool filterOn; /** Set to true if want to use it with the following coefficients **/
+        base::VectorXd feedForwardCoeff; /** b coefficients **/
+        base::VectorXd feedBackCoeff; /** a coefficients **/
     };
 
 }

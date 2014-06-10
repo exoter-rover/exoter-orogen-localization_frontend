@@ -5,7 +5,7 @@ name "localization_frontend"
 # If new data types need to be defined, they have to be put in a separate C++
 # header, and this header will be loaded here
 using_library "frame_helper" # Image Frames
-using_library "localization" # The IIR filter
+using_library "localization" # The IIR/FIR filter
 
 # If the component/deployments use data types that are defined in other oroGen
 # projects, these projects should be imported there as well.
@@ -34,18 +34,22 @@ task_context "Task" do
 
     property('reference_target_frame', '/std/string').doc 'To Frame for the transformer'
 
+    property('world_source_frame', '/std/string').doc 'From Frame for the transformer'
+
+    property('world_target_frame', '/std/string').doc 'To Frame for the transformer'
+
     property('jointNames', 'std/vector<std/string>').
 	doc 'Locomotion joints searching by names.'
 
     #******************************
     #*** IIR Filter Properties ****
     #******************************
-    property('iir_filter', 'localization_frontend/IIRCoefficients').
-        doc 'Configuration values to run the Infinite Impulse Response (IIR) over the noisy passive joints. Look in Types for further details.'
+    property('filter_config', 'localization_frontend/FilterCoefficients').
+        doc 'Configuration values to run the IIR/FIR filter over the noisy passive joints. Look in Types for further details.'
 
-    property('iir_jointNames', 'std/vector<std/string>').
-	doc 'Joints in which the IIR wants to be apply. These joints names MUST be also contained in the jointNames. '+
-        'Maximum number of three joints. In case more joints are required you need to change the code due to template classes. IIR_FILTER_VECTOR_SIZE'
+    property('filter_jointNames', 'std/vector<std/string>').
+	doc 'Joints in which the filter wants to be apply. These joints names MUST be also contained in the jointNames. '+
+        'Maximum number of three joints. In case more joints are required you need to change the code due to template classes. FILTER_VECTOR_SIZE'
 
     #******************************
     #**** Camera Properties ********
@@ -134,7 +138,7 @@ task_context "Task" do
 	doc 'Delta pose and velocities computed from the ground truth system.'
 
     output_port('world_osg_to_world_out', 'base/samples/RigidBodyState').
-	doc 'Transformation for the transformer: world_osg frame (origin in visualization) expressed in the estimated world frame (North-East-Up).'
+	doc 'Transformation for the transformer: world_osg frame (North-East-Up) expressed in the estimated intermediate world frame.'
 
     output_port('world_to_navigation_out', 'base/samples/RigidBodyState').
 	doc 'Transformation for the transformer: navigation frame (initial starting point) expressed in the world frame.'
