@@ -9,7 +9,7 @@
 #define R2D 180.00/M_PI /** Convert radian to degree **/
 #endif
 
-#define DEBUG_PRINTS 1
+//#define DEBUG_PRINTS 1
 
 using namespace localization_frontend;
 
@@ -99,6 +99,12 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 		
 	initPosition = true;
     }
+    else if (initAttitude)
+    {
+        /** Transform the reference pose world_body to navigation_body **/
+        Eigen::Affine3d Tworld_body = referencePoseSamples[0].getTransform();
+        referencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);
+    }
 
    flag.referencePoseSamples = true;
 }
@@ -171,7 +177,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
     /** Push one sample into the buffer **/
     cbOrientationSamples.push_front(orientation_samples_sample);
 
-    /** Transform the orientation world_imu to world_body **/
+    /** Transform the orientation world(osg)_imu to world_body **/
     cbOrientationSamples[0].orientation = orientation_samples_sample.orientation * qtf.inverse(); // Tworld_body = Tworld_imu * (Tbody_imu)^-1
     cbOrientationSamples[0].cov_orientation = orientation_samples_sample.cov_orientation * tf.rotation().inverse(); // Tworld_body = Tworld_imu * (Tbody_imu)^-1
 
@@ -194,8 +200,6 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
                 RTT::log(RTT::Warning)<<"Initial Heading from External Reference is not Valid."<<RTT::endlog();
             }
 
-            std::cout<<"********** Heading: "<<heading<<"\n";
-
             /** Align the Yaw from the referencePoseSamples, Pitch and Roll from orientationSamples **/
             attitude = Eigen::Quaternion <double>(
                     Eigen::AngleAxisd(heading, Eigen::Vector3d::UnitZ())*
@@ -205,7 +209,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             attitude.normalize();
 
             /** Compute the world_osg to world frame **/
-            world_osg2worldRbs.orientation = attitude *  cbOrientationSamples[0].orientation.inverse();
+            world_osg2worldRbs.orientation = cbOrientationSamples[0].orientation * attitude.inverse();//Tworld_osg_body * (Tworld_body)^-1
 
             initAttitude = true;
         }
@@ -262,6 +266,13 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
                     state(RUNNING);
             }
         }
+    }
+    else
+    {
+        /** Transform the orientation world_body to navigation_body **/
+        Eigen::Quaterniond qnavigation_world((world_osg2worldRbs.orientation * world2navigationRbs.orientation).inverse());
+        cbOrientationSamples[0].orientation = qnavigation_world * cbOrientationSamples[0].orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
+        cbOrientationSamples[0].cov_orientation = qnavigation_world.toRotationMatrix() * cbOrientationSamples[0].cov_orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
     }
 
     /** Set the flag of IMU values valid to true **/
@@ -324,7 +335,6 @@ void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base:
         if (counter.orientationSamples > cbOrientationSamples.size())
             counter.orientationSamples = 0;
     }
-
 }
 
 void Task::left_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &left_frame_sample)
