@@ -104,6 +104,12 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
         /** Transform the reference pose world_body to navigation_body **/
         Eigen::Affine3d Tworld_body = referencePoseSamples[0].getTransform();
         referencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);
+
+        /** Compute velocity **/
+        if (referencePoseSamples.size() > 0)
+        {
+            referencePoseSamples[0].velocity = (referencePoseSamples[0].position - referencePoseSamples[1].position)/_reference_pose_samples_period.value();
+        }
     }
 
    flag.referencePoseSamples = true;
@@ -609,9 +615,9 @@ void Task::cleanupHook()
 
 void Task::inputPortSamples()
 {
-    unsigned int cbJointsSize = cbJointsSamples.size();
-    unsigned int cbImuSize = cbImuSamples.size();
-    unsigned int cbOrientationSize = cbOrientationSamples.size();
+    double cbJointsSize = static_cast<double>(cbJointsSamples.size());
+    double cbImuSize =  static_cast<double>(cbImuSamples.size());
+    double cbOrientationSize =  static_cast<double>(cbOrientationSamples.size());
 
     /** Local variable of the ports **/
     base::samples::Joints joint;
@@ -634,7 +640,11 @@ void Task::inputPortSamples()
     /** Process the buffer **/
     for (register size_t j = 0; j<joint.size(); ++j)
     {
-        for (register size_t i = 0; i<cbJointsSize; ++i)
+        joint[j].position = 0.00;
+        joint[j].speed = 0.00;
+        joint[j].effort = 0.00;
+
+        for (register size_t i = 0; i<cbJointsSamples.size(); ++i)
         {
 	    joint[j].speed += cbJointsSamples[i][j].speed;
 	    joint[j].effort += cbJointsSamples[i][j].effort;
@@ -644,7 +654,7 @@ void Task::inputPortSamples()
         joint[j].effort /= cbJointsSize;
     }
 
-    if (cbJointsSize > 0)
+    if (cbJointsSize > 0.0)
     {
         /** Get the joints names **/
         joint.names = cbJointsSamples[0].names;
@@ -689,7 +699,7 @@ void Task::inputPortSamples()
     /** ******************* **/
     /** Orientation samples **/
     /** ******************* **/
-    if (cbOrientationSize > 0)
+    if (cbOrientationSize > 0.0)
     {
         orientation.orientation = cbOrientationSamples[0].orientation;
         orientation.cov_orientation = cbOrientationSamples[0].cov_orientation;
@@ -710,7 +720,7 @@ void Task::inputPortSamples()
     imu.mag.setZero();
 
     /** Process the buffer **/
-    for (register unsigned int i=0; i<cbImuSize; ++i)
+    for (register unsigned int i=0; i<cbImuSamples.size(); ++i)
     {
 	imu.acc += cbImuSamples[i].acc;
 	imu.gyro += cbImuSamples[i].gyro;
@@ -769,6 +779,11 @@ void Task::calculateJointsVelocities()
 
         base::JointState const &joint_state(joints[*it]);
 
+        #ifdef DEBUG_PRINTS
+        std::cout<<"[CALCULATING_VELO] ********************************************* \n";
+        std::cout<<"[CALCULATING_VELO] Joint Name:"<<*it <<"\n";
+        #endif
+
         /** Calculate speed in case there is not speed information **/
         if (!joint_state.hasSpeed())
         {
@@ -777,15 +792,14 @@ void Task::calculateJointsVelocities()
             #ifdef DEBUG_PRINTS
             base::Time jointsDelta_t = joints.time - prev_joints.time;
 
-            std::cout<<"[CALCULATING_VELO] ********************************************* \n";
-            std::cout<<"[CALCULATING_VELO] Joint Name:"<<*it <<"\n";
             std::cout<<"[CALCULATING_VELO] Encoder Timestamp New: "<< joints.time.toMicroseconds() <<" Timestamp Prev: "<<prev_joints.time.toMicroseconds()<<"\n";
             std::cout<<"[CALCULATING_VELO] Delta time(joints): "<< jointsDelta_t.toSeconds()<<"\n";
-            std::cout<<"[CALCULATING_VELO] ********************************************* \n";
+            std::cout<<"[CALCULATING_VELO] Delta proprioceptive_output_frequency: "<< delta_t<<"\n";
+            std::cout<<"[CALCULATING_VELO] Delta position(joints): "<< prev_joint_state.position<<" - "<<joint_state.position<<" = "<< prev_joint_state.position-joint_state.position <<"\n";
             #endif
 
             /** At least two values to perform the derivative **/
-            jointsSamplesOut[jointIdx].speed = (joint_state.position - prev_joint_state.position)/delta_t;
+            jointsSamplesOut[jointIdx].speed = (joint_state.position - prev_joint_state.position)/std::max(jointsDelta_t.toSeconds(),delta_t);
         }
         else
         {
@@ -794,7 +808,8 @@ void Task::calculateJointsVelocities()
 
         #ifdef DEBUG_PRINTS
         std::cout<<"[CALCULATING_VELO] ["<<jointIdx<<"] joint speed: "<< jointsSamplesOut[jointIdx].speed <<"\n";
-        std::cout<<"[CALCULATING_VELO] ["<<jointIdx<<"] jointsSamples old velocity: "<<(joints[jointIdx].position - prev_joints[jointIdx].position)/delta_t<<"\n";
+        std::cout<<"[CALCULATING_VELO] ["<<jointIdx<<"] jointsSamples old velocity method: "<<(joints[jointIdx].position - prev_joints[jointIdx].position)/delta_t<<"\n";
+        std::cout<<"[CALCULATING_VELO] ********************************************* \n";
         #endif
 
         jointIdx++;
@@ -827,15 +842,14 @@ void Task::outputPortSamples()
     {
         /** Port Out the info coming from the ground truth **/
         referenceOut = referencePoseSamples[0];
-        referenceOut.velocity = world2navigationRbs.orientation.inverse() * referencePoseSamples[0].velocity; //velocity in navigation frame
         referenceOut.time = jointsSamples[0].time;
         _reference_pose_samples_out.write(referenceOut);
 
         /** Delta increments of the ground truth at delta_t given by the output_frequency **/
         referenceOut.position = referencePoseSamples[0].position - referencePoseSamples[1].position;
         referenceOut.cov_position = referencePoseSamples[0].cov_position + referencePoseSamples[1].cov_position;
-        referenceOut.velocity = world2navigationRbs.orientation.inverse() * (referencePoseSamples[0].velocity - referencePoseSamples[1].velocity);//in navigation frame
-        referenceOut.cov_velocity = world2navigationRbs.orientation.inverse() * (referencePoseSamples[0].cov_velocity + referencePoseSamples[1].cov_velocity);
+        referenceOut.velocity = (referencePoseSamples[0].velocity - referencePoseSamples[1].velocity);//in navigation frame
+        referenceOut.cov_velocity = (referencePoseSamples[0].cov_velocity + referencePoseSamples[1].cov_velocity);
         _reference_delta_pose_samples_out.write(referenceOut);
     }
 
