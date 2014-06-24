@@ -788,9 +788,9 @@ void Task::calculateJointsVelocities()
         if (!joint_state.hasSpeed())
         {
             base::JointState const &prev_joint_state(prev_joints[*it]);
+            base::Time jointsDelta_t = joints.time - prev_joints.time;
 
             #ifdef DEBUG_PRINTS
-            base::Time jointsDelta_t = joints.time - prev_joints.time;
 
             std::cout<<"[CALCULATING_VELO] Encoder Timestamp New: "<< joints.time.toMicroseconds() <<" Timestamp Prev: "<<prev_joints.time.toMicroseconds()<<"\n";
             std::cout<<"[CALCULATING_VELO] Delta time(joints): "<< jointsDelta_t.toSeconds()<<"\n";
