@@ -701,8 +701,29 @@ void Task::inputPortSamples()
     /** ******************* **/
     if (cbOrientationSize > 0.0)
     {
-        orientation.orientation = cbOrientationSamples[0].orientation;
-        orientation.cov_orientation = cbOrientationSamples[0].cov_orientation;
+        Eigen::Matrix3d cov_orientation; cov_orientation.setZero();
+        double w = 0.00;
+        double x = 0.00;
+        double y = 0.00;
+        double z = 0.00;
+
+        /** Process the buffer **/
+        for (register unsigned int i=0; i<cbOrientationSamples.size(); ++i)
+        {
+            w += cbOrientationSamples[i].orientation.w();
+            x += cbOrientationSamples[i].orientation.x();
+            y += cbOrientationSamples[i].orientation.y();
+            z += cbOrientationSamples[i].orientation.z();
+
+            cov_orientation += cbOrientationSamples[i].cov_orientation;
+        }
+
+        w = w/cbOrientationSize; y = y/cbOrientationSize;
+        x = x/cbOrientationSize; z = z/cbOrientationSize;
+        orientation.orientation = Eigen::Quaterniond(w, x, y, z);
+        orientation.orientation.normalize();
+
+        orientation.cov_orientation = cov_orientation/cbOrientationSize;
 
         /** Set the time **/
         orientation.time = (cbOrientationSamples[cbOrientationSize-1].time + cbOrientationSamples[0].time)/2.0;
