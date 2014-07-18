@@ -126,6 +126,13 @@ void Task::inertial_samplesTransformerCallback(const base::Time &ts, const ::bas
 
     qtf = Eigen::Quaternion <double> (tf.rotation());//!Quaternion from Body to imu (transforming samples from imu to body)
 
+    /** Increment counter **/
+    counter.imuSamples++;
+
+    /** Set the flag of Inertial samples values valid to true **/
+    if (counter.imuSamples == cbImuSamples.capacity())
+        flag.imuSamples = true;
+
     base::samples::IMUSensors imusample;
 
     /** A new sample arrived to the port **/
@@ -157,12 +164,6 @@ void Task::inertial_samplesTransformerCallback(const base::Time &ts, const ::bas
     std::cout<<"mag(body_frame):\n"<<imusample.mag<<"\n";
     #endif
 
-    /** Set the flag of IMU values valid to true **/
-    if (!flag.imuSamples && (cbImuSamples.size() == cbImuSamples.capacity()))
-        flag.imuSamples = true;
-
-    counter.imuSamples++;
-
 }
 
 void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &orientation_samples_sample)
@@ -175,6 +176,13 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 	return;
 
     qtf = Eigen::Quaternion <double> (tf.rotation());//!Quaternion from Body to imu (transforming samples from imu to body)
+
+    /** Increment counter **/
+    counter.orientationSamples++;
+
+    /** Set the flag of orientation samples values valid to true **/
+    if (counter.orientationSamples == cbOrientationSamples.capacity())
+        flag.orientationSamples = true;
 
     #ifdef DEBUG_PRINTS
     std::cout<<"** [EXOTER ORIENTATION_SAMPLES] counter.orientationSamples("<<counter.orientationSamples<<") at ("<<orientation_samples_sample.time.toMicroseconds()<< ")**\n";
@@ -281,33 +289,30 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
         cbOrientationSamples[0].cov_orientation = qnavigation_world.toRotationMatrix() * cbOrientationSamples[0].cov_orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
     }
 
-    /** Set the flag of IMU values valid to true **/
-    if (!flag.orientationSamples && (cbOrientationSamples.size() == cbOrientationSamples.capacity()))
-        flag.orientationSamples = true;
-
-    counter.orientationSamples++;
 }
 
 void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample)
 {
     /** A new sample arrived to the Input port **/
     cbJointsSamples.push_front(joints_samples_sample);
+
+    /** Increment counter **/
     counter.jointsSamples++;
 
-    if (!flag.jointsSamples && (cbJointsSamples.size() == cbJointsSamples.capacity()))
+    /** Set the flag of joints samples values valid to true **/
+    if (counter.jointsSamples == cbJointsSamples.capacity())
     	flag.jointsSamples = true;
-    else
-	flag.jointsSamples = false;
+
 
     #ifdef DEBUG_PRINTS
-    std::cout<<"** [EXOTER ENCODERS-SAMPLES] counter.jointsSamples("<<counter.jointsSamples<<") at ("<<joints_samples_sample.time.toMicroseconds()
-	<<") received FR ("<<joints_samples_sample[0].position<<")**\n";
+    std::cout<<"** [EXOTER JOINTS-SAMPLES] counter.jointsSamples("<<counter.jointsSamples<<") at ("<<joints_samples_sample.time.toMicroseconds()
+        <<") received FR position ("<<joints_samples_sample[0].position<<")**\n";
     #endif
 
     #ifdef DEBUG_PRINTS
-    std::cout<<"** [EXOTER ENCODERS-SAMPLES] [COUNTERS] jointsCounter ("<<counter.jointsSamples<<") imuCounter("<<counter.imuSamples<<") orientationSamples("<<counter.orientationSamples<<") **\n";
-    std::cout<<"** [EXOTER ENCODERS-SAMPLES] [FLAGS] initAttitude ("<<initAttitude<<") initPosition("<<initPosition<<") **\n";
-    std::cout<<"** [EXOTER ENCODERS-SAMPLES] [FLAGS] flagJoints ("<<flag.jointsSamples<<") flagIMU("<<flag.imuSamples<<") flagOrient("<<flag.orientationSamples<<") **\n";
+    std::cout<<"** [EXOTER JOINTS-SAMPLES] [COUNTERS] jointsCounter ("<<counter.jointsSamples<<") imuCounter("<<counter.imuSamples<<") orientationSamples("<<counter.orientationSamples<<") **\n";
+    std::cout<<"** [EXOTER JOINTS-SAMPLES] [FLAGS] initAttitude ("<<initAttitude<<") initPosition("<<initPosition<<") **\n";
+    std::cout<<"** [EXOTER JOINTS-SAMPLES] [FLAGS] flagJoints ("<<flag.jointsSamples<<") flagIMU("<<flag.imuSamples<<") flagOrient("<<flag.orientationSamples<<") **\n";
     #endif
 
     if (state() == RUNNING)
@@ -315,7 +320,7 @@ void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base:
         if (flag.imuSamples && flag.orientationSamples && flag.jointsSamples)
         {
             #ifdef DEBUG_PRINTS
-            std::cout<<"[ON] ** [EXOTER ENCODERS-SAMPLES] ** [ON] ("<<jointsSamples[0].time.toMicroseconds()<<")\n";
+            std::cout<<"[ON] ** [EXOTER JOINTS-SAMPLES] ** [ON] ("<<jointsSamples[0].time.toMicroseconds()<<")\n";
        	    #endif
 
             /** Get the correct values from the input ports buffers  **/
