@@ -42,6 +42,7 @@ Task::Task(std::string const& name)
     cbJointsSamples = boost::circular_buffer<base::samples::Joints>(DEFAULT_CIRCULAR_BUFFER_SIZE);
     cbImuSamples = boost::circular_buffer<base::samples::IMUSensors> (DEFAULT_CIRCULAR_BUFFER_SIZE);
     cbOrientationSamples = boost::circular_buffer<base::samples::RigidBodyState> (DEFAULT_CIRCULAR_BUFFER_SIZE);
+    cbReferencePoseSamples = boost::circular_buffer<base::samples::RigidBodyState> (DEFAULT_CIRCULAR_BUFFER_SIZE);
 
     /** Default size for the circular_buffer for the filtered port samples **/
     jointsSamples = boost::circular_buffer<base::samples::Joints>(DEFAULT_CIRCULAR_BUFFER_SIZE);
@@ -62,17 +63,17 @@ Task::~Task()
 
 void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &reference_pose_samples_sample)
 {
-    referencePoseSamples.push_front(reference_pose_samples_sample);
+    cbReferencePoseSamples.push_front(reference_pose_samples_sample);
 
     #ifdef DEBUG_PRINTS
-    std::cout<<"** [EXOTER REFERENCE-POSE]Received referencePoseSamples sample at("<<reference_pose_samples_sample.time.toMicroseconds()<<") **\n";
+    std::cout<<"** [EXOTER REFERENCE-POSE]Received Reference Pose Samples at("<<reference_pose_samples_sample.time.toMicroseconds()<<") **\n";
     #endif
 
     if (!initPosition)
     {
         /** Set position **/
-        world2navigationRbs.position = referencePoseSamples[0].position;
-        world2navigationRbs.orientation = referencePoseSamples[0].orientation;
+        world2navigationRbs.position = cbReferencePoseSamples[0].position;
+        world2navigationRbs.orientation = cbReferencePoseSamples[0].orientation;
 	
         world2navigationRbs.velocity.setZero();
 
@@ -82,11 +83,11 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 	
 	#ifdef DEBUG_PRINTS
 	Eigen::Matrix <double,3,1> euler; /** In Euler angles **/
-	euler[2] = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];//Yaw
-	euler[1] = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[1];//Pitch
-	euler[0] = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[2];//Roll
- 	std::cout<<"** [EXOTER REFERENCE-POSE]referencePoseSamples at ("<<referencePoseSamples[0].time.toMicroseconds()<< ")**\n";
-	std::cout<<"** position(world_frame)\n"<< referencePoseSamples[0].position<<"\n";
+	euler[2] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];//Yaw
+	euler[1] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[1];//Pitch
+	euler[0] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[2];//Roll
+ 	std::cout<<"** [EXOTER REFERENCE-POSE]cbReferencePoseSamples at ("<<cbReferencePoseSamples[0].time.toMicroseconds()<< ")**\n";
+	std::cout<<"** position(world_frame)\n"<< cbReferencePoseSamples[0].position<<"\n";
 	std::cout<<"** Roll: "<<euler[0]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[2]*R2D<<"\n";
 	#endif
 
@@ -102,14 +103,9 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
     else if (initAttitude)
     {
         /** Transform the reference pose world_body to navigation_body **/
-        Eigen::Affine3d Tworld_body = referencePoseSamples[0].getTransform();
-        referencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);
+        Eigen::Affine3d Tworld_body = cbReferencePoseSamples[0].getTransform();
+        cbReferencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);
 
-        /** Compute velocity **/
-        if (referencePoseSamples.size() > 0)
-        {
-            referencePoseSamples[0].velocity = (referencePoseSamples[0].position - referencePoseSamples[1].position)/_reference_pose_samples_period.value();
-        }
     }
 
    flag.referencePoseSamples = true;
@@ -205,16 +201,16 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             double heading = 0.00;
 
             /** Check if the reference pose has a valid orientation **/
-            if(base::samples::RigidBodyState::isValidValue(referencePoseSamples[0].orientation))
+            if(base::samples::RigidBodyState::isValidValue(cbReferencePoseSamples[0].orientation))
             {
-                heading = referencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];
+                heading = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];
             }
             else
             {
                 RTT::log(RTT::Warning)<<"Initial Heading from External Reference is not Valid."<<RTT::endlog();
             }
 
-            /** Align the Yaw from the referencePoseSamples, Pitch and Roll from orientationSamples **/
+            /** Align the Yaw from the Reference Pose Samples, Pitch and Roll from orientationSamples **/
             attitude = Eigen::Quaternion <double>(
                     Eigen::AngleAxisd(heading, Eigen::Vector3d::UnitZ())*
                     Eigen::AngleAxisd(attitude.toRotationMatrix().eulerAngles(2,1,0)[1], Eigen::Vector3d::UnitY()) *
@@ -461,25 +457,29 @@ bool Task::configureHook()
     if (proprioceptive_output_frequency != 0.00)
     {
 	number.imuSamples = (1.0/_inertial_samples_period.value())/proprioceptive_output_frequency;
-	number.orientationSamples = (1.0/_orientation_samples_period.value())/proprioceptive_output_frequency;
 	number.jointsSamples = (1.0/_joints_samples_period.value())/proprioceptive_output_frequency;
+	number.orientationSamples = (1.0/_orientation_samples_period.value())/proprioceptive_output_frequency;
+	number.referencePoseSamples = (1.0/_reference_pose_samples_period.value())/proprioceptive_output_frequency;
     }
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[EXOTER CONFIGURE] cbJointsSamples has init capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
     std::cout<<"[EXOTER CONFIGURE] cbImuSamples has init capacity "<<cbImuSamples.capacity()<<" and size "<<cbImuSamples.size()<<"\n";
     std::cout<<"[EXOTER CONFIGURE] cbOrientationSamples has capacity "<<cbOrientationSamples.capacity()<<" and size "<<cbOrientationSamples.size()<<"\n";
+    std::cout<<"[EXOTER CONFIGURE] cbReferencePoseSamples has capacity "<<cbReferencePoseSamples.capacity()<<" and size "<<cbReferencePoseSamples.size()<<"\n";
     #endif
 
     /** Set the capacity of the circular_buffer according to the sampling rate **/
     cbJointsSamples.set_capacity(number.jointsSamples);
     cbImuSamples.set_capacity(number.imuSamples);
     cbOrientationSamples.set_capacity(number.orientationSamples);
+    cbReferencePoseSamples.set_capacity(number.referencePoseSamples);
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[EXOTER CONFIGURE] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
     std::cout<<"[EXOTER CONFIGURE] cbImuSamples has capacity "<<cbImuSamples.capacity()<<" and size "<<cbImuSamples.size()<<"\n";
     std::cout<<"[EXOTER CONFIGURE] cbOrientationSamples has capacity "<<cbOrientationSamples.capacity()<<" and size "<<cbOrientationSamples.size()<<"\n";
+    std::cout<<"[EXOTER CONFIGURE] cbReferencePoseSamples has capacity "<<cbReferencePoseSamples.capacity()<<" and size "<<cbReferencePoseSamples.size()<<"\n";
     #endif
 
     for(register unsigned int i=0; i<cbJointsSamples.size(); ++i)
@@ -505,7 +505,7 @@ bool Task::configureHook()
 	imuSamples[i].mag = imuSamples[0].acc;
     }
 
-    /** Initialize the samples for the filtered buffer referencePoseSamples values **/
+    /** Initialize the samples for the filtered buffer Reference Pose Samples values **/
     for(register unsigned int i=0; i<referencePoseSamples.size(); ++i)
     {
 	/** Pose Init **/
@@ -556,6 +556,7 @@ bool Task::configureHook()
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.jointsSamples: "<<number.jointsSamples<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.imuSamples: "<<number.imuSamples<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.orientationSamples: "<<number.orientationSamples<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.referencePoseSamples: "<<number.referencePoseSamples<<RTT::endlog();
 
     if (filterConfig.filterOn)
         RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Low-Pass Filter [ON]"<<RTT::endlog();
@@ -623,19 +624,22 @@ void Task::inputPortSamples()
     double cbJointsSize = static_cast<double>(cbJointsSamples.size());
     double cbImuSize =  static_cast<double>(cbImuSamples.size());
     double cbOrientationSize =  static_cast<double>(cbOrientationSamples.size());
+    double cbReferencePoseSize =  static_cast<double>(cbReferencePoseSamples.size());
 
     /** Local variable of the ports **/
     base::samples::Joints joint;
     base::samples::IMUSensors imu;
     base::samples::RigidBodyState orientation;
+    base::samples::RigidBodyState reference_pose;
 
     /** Sizing the joints **/
     joint.resize(jointNames.size());
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[GetInportValue] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
-    std::cout<<"[GetInportValue] cbOrientationSamples has capacity "<<cbOrientationSamples.capacity()<<" and size "<<cbOrientationSamples.size()<<"\n";
     std::cout<<"[GetInportValue] cbImuSamples has capacity "<<cbImuSamples.capacity()<<" and size "<<cbImuSamples.size()<<"\n";
+    std::cout<<"[GetInportValue] cbOrientationSamples has capacity "<<cbOrientationSamples.capacity()<<" and size "<<cbOrientationSamples.size()<<"\n";
+    std::cout<<"[GetInportValue] cbReferencePoseSamples has capacity "<<cbReferencePoseSamples.capacity()<<" and size "<<cbReferencePoseSamples.size()<<"\n";
     #endif
 
     /** ********* **/
@@ -737,6 +741,57 @@ void Task::inputPortSamples()
         orientationSamples.push_front(orientation);
 
     }
+
+    /** ********************** **/
+    /** Reference Pose samples **/
+    /** ********************** **/
+    if (cbReferencePoseSize > 0.0)
+    {
+        Eigen::Vector3d position; position.setZero();
+        Eigen::Matrix3d cov_position; cov_position.setZero();
+        Eigen::Matrix3d cov_orientation; cov_orientation.setZero();
+        double w = 0.00;
+        double x = 0.00;
+        double y = 0.00;
+        double z = 0.00;
+
+        reference_pose.invalidate();
+
+        /** Process the buffer **/
+        for (register unsigned int i=0; i<cbReferencePoseSamples.size(); ++i)
+        {
+            /** Position **/
+            position += cbReferencePoseSamples[i].position;
+            cov_position += cbReferencePoseSamples[i].cov_position;
+
+            /** Orientation **/
+            w += cbReferencePoseSamples[i].orientation.w();
+            x += cbReferencePoseSamples[i].orientation.x();
+            y += cbReferencePoseSamples[i].orientation.y();
+            z += cbReferencePoseSamples[i].orientation.z();
+
+            cov_orientation += cbReferencePoseSamples[i].cov_orientation;
+        }
+
+        /** Mean Position **/
+        reference_pose.position = position/cbReferencePoseSize;
+        reference_pose.cov_position = cov_position/cbReferencePoseSize;
+
+        /** Mean Orientation **/
+        w = w/cbReferencePoseSize; y = y/cbReferencePoseSize;
+        x = x/cbReferencePoseSize; z = z/cbReferencePoseSize;
+        reference_pose.orientation = Eigen::Quaterniond(w, x, y, z);
+        reference_pose.orientation.normalize();
+
+        reference_pose.cov_orientation = cov_orientation/cbReferencePoseSize;
+
+        /** Set the time **/
+        reference_pose.time = (cbReferencePoseSamples[cbReferencePoseSize-1].time + cbReferencePoseSamples[0].time)/2.0;
+
+        /** Push the result into the buffer **/
+        referencePoseSamples.push_front(reference_pose);
+    }
+
 
     /** ************ **/
     /** IMU samples **/
@@ -841,6 +896,13 @@ void Task::calculateJointsVelocities()
         jointIdx++;
     }
 
+    /** Mean velocities for the Reference Pose **/
+    if (static_cast<int>(referencePoseSamples.size()) > 1)
+    {
+        referencePoseSamples[0].velocity = (referencePoseSamples[referencePoseSamples.size()-1].position - referencePoseSamples[0].position)/delta_t;
+        referencePoseSamples[0].cov_velocity = (referencePoseSamples[referencePoseSamples.size()-1].cov_position - referencePoseSamples[0].cov_position)/(delta_t * delta_t);//No considering covariance just variance
+    }
+
     return;
 }
 
@@ -868,7 +930,6 @@ void Task::outputPortSamples()
     {
         /** Port Out the info coming from the ground truth **/
         referenceOut = referencePoseSamples[0];
-        referenceOut.time = jointsSamples[0].time;
         _reference_pose_samples_out.write(referenceOut);
 
         /** Delta increments of the ground truth at delta_t given by the output_frequency **/

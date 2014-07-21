@@ -153,6 +153,7 @@ namespace localization_frontend {
  	boost::circular_buffer<base::samples::Joints> cbJointsSamples;
 	boost::circular_buffer<base::samples::IMUSensors> cbImuSamples;
 	boost::circular_buffer<base::samples::RigidBodyState> cbOrientationSamples;
+	boost::circular_buffer<base::samples::RigidBodyState> cbReferencePoseSamples;
 	
  	/** Buffer for filtered Inputs port samples (Store the samples and compute the velocities) **/
 	boost::circular_buffer<base::samples::Joints> jointsSamples; /** Encoder Status information  **/
