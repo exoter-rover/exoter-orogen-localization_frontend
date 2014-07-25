@@ -106,6 +106,7 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
         Eigen::Affine3d Tworld_body = cbReferencePoseSamples[0].getTransform();
         cbReferencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);
 
+        /** At this point reference pose does not have info regarding linear or angular velocity **/
     }
 
    flag.referencePoseSamples = true;
@@ -279,10 +280,10 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
     }
     else
     {
-        /** Transform the orientation world_body to navigation_body **/
-        Eigen::Quaterniond qnavigation_world((world_osg2worldRbs.orientation * world2navigationRbs.orientation).inverse());
-        cbOrientationSamples[0].orientation = qnavigation_world * cbOrientationSamples[0].orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
-        cbOrientationSamples[0].cov_orientation = qnavigation_world.toRotationMatrix() * cbOrientationSamples[0].cov_orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
+        /** Transform the orientation world(osg)_body to navigation_body **/
+        Eigen::Quaterniond qnavigation_world_osg((world_osg2worldRbs.orientation * world2navigationRbs.orientation).inverse());
+        cbOrientationSamples[0].orientation = qnavigation_world_osg * cbOrientationSamples[0].orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
+        cbOrientationSamples[0].cov_orientation = qnavigation_world_osg.toRotationMatrix() * cbOrientationSamples[0].cov_orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
     }
 
 }
@@ -323,7 +324,7 @@ void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base:
             this->inputPortSamples();
 
             /** Calculate velocities from the input ports **/
-            this->calculateJointsVelocities();
+            this->calculateVelocities();
 
             /** Out port the information of the  **/
             this->outputPortSamples ();
@@ -836,7 +837,7 @@ void Task::inputPortSamples()
     return;
 }
 
-void Task::calculateJointsVelocities()
+void Task::calculateVelocities()
 {
     double delta_t = (1.0/proprioceptive_output_frequency);
 
@@ -899,8 +900,32 @@ void Task::calculateJointsVelocities()
     /** Mean velocities for the Reference Pose **/
     if (static_cast<int>(referencePoseSamples.size()) > 1)
     {
-        referencePoseSamples[0].velocity = (referencePoseSamples[referencePoseSamples.size()-1].position - referencePoseSamples[0].position)/delta_t;
-        referencePoseSamples[0].cov_velocity = (referencePoseSamples[referencePoseSamples.size()-1].cov_position - referencePoseSamples[0].cov_position)/(delta_t * delta_t);//No considering covariance just variance
+        /** Linear Velocities **/
+        if (!::base::samples::RigidBodyState::isValidValue(referencePoseSamples[0].velocity))
+        {
+            /** Array of zero is the newest sample **/
+            referencePoseSamples[0].velocity = (referencePoseSamples[0].position - referencePoseSamples[referencePoseSamples.size()-1].position)/delta_t;
+        }
+
+        if (!::base::samples::RigidBodyState::isValidCovariance(referencePoseSamples[0].cov_velocity))
+        {
+            /** Array of zero is the newest sample **/
+            referencePoseSamples[0].cov_velocity = (referencePoseSamples[0].cov_position  - referencePoseSamples[referencePoseSamples.size()-1].cov_position)/(delta_t * delta_t);//No considering covariance just variance
+        }
+
+        /** Angular Velocities **/
+        if (!::base::samples::RigidBodyState::isValidValue(referencePoseSamples[0].angular_velocity))
+        {
+            /** Array of zero is the newest sample **/
+            Eigen::AngleAxisd deltaAngleaxis(referencePoseSamples[referencePoseSamples.size()-1].orientation.inverse() * referencePoseSamples[0].orientation);
+            referencePoseSamples[0].angular_velocity = (deltaAngleaxis.angle() * deltaAngleaxis.axis())/delta_t;
+        }
+
+        if (!::base::samples::RigidBodyState::isValidCovariance(referencePoseSamples[0].cov_angular_velocity))
+        {
+            /** Array of zero is the newest sample **/
+            referencePoseSamples[0].cov_angular_velocity = (referencePoseSamples[0].cov_orientation  - referencePoseSamples[referencePoseSamples.size()-1].cov_orientation)/(delta_t * delta_t);
+        }
     }
 
     return;

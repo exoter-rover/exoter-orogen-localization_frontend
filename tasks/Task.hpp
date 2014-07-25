@@ -288,7 +288,7 @@ namespace localization_frontend {
 
         /** @brief Compute Cartesian and Model velocities 
 	 */
-	void calculateJointsVelocities();
+	void calculateVelocities();
 
         /** @brief Port out the values
 	 */
