@@ -593,6 +593,10 @@ bool Task::startHook()
 {
     if (! TaskBase::startHook())
         return false;
+
+    if (!initPosition && !initAttitude)
+        state(INITIAL_POSITIONING);
+
     return true;
 }
 void Task::updateHook()
