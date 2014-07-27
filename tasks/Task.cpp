@@ -351,15 +351,19 @@ void Task::left_frameTransformerCallback(const base::Time &ts, const ::RTT::extr
     std::cout<<"[EXOTER LEFT-CAMERA] Frame at: "<<left_frame_sample->time.toMicroseconds()<<"\n";
     #endif
 
-    /** Undistorted image depending on meta data information **/
-    ::base::samples::frame::Frame *frame_ptr = leftFrame.write_access();
-    frame_ptr->time = left_frame_sample->time;
-    frame_ptr->init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), left_frame_sample->getFrameMode());
-    frameHelperLeft.convert(*left_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
-    leftFrame.reset(frame_ptr);
+    if (state() == RUNNING)
+    {
 
-    /** Write the camera frame into the port **/
-    _left_frame_out.write(leftFrame);
+        /** Undistorted image depending on meta data information **/
+        ::base::samples::frame::Frame *frame_ptr = leftFrame.write_access();
+        frame_ptr->time = left_frame_sample->time;
+        frame_ptr->init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), left_frame_sample->getFrameMode());
+        frameHelperLeft.convert(*left_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
+        leftFrame.reset(frame_ptr);
+
+        /** Write the camera frame into the port **/
+        _left_frame_out.write(leftFrame);
+    }
 
     return;
 }
@@ -370,15 +374,19 @@ void Task::right_frameTransformerCallback(const base::Time &ts, const ::RTT::ext
     std::cout<<"[EXOTER RIGHT-CAMERA] Frame at: "<<right_frame_sample->time.toMicroseconds()<<"\n";
     #endif
 
-    /** Undistorted image depending on meta data information **/
-    ::base::samples::frame::Frame *frame_ptr = rightFrame.write_access();
-    frame_ptr->time = right_frame_sample->time;
-    frame_ptr->init(right_frame_sample->size.width, right_frame_sample->size.height, right_frame_sample->getDataDepth(), right_frame_sample->getFrameMode());
-    frameHelperRight.convert(*right_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
-    rightFrame.reset(frame_ptr);
+    if (state() == RUNNING)
+    {
 
-    /** Write the camera frame into the port **/
-    _right_frame_out.write(rightFrame);
+        /** Undistorted image depending on meta data information **/
+        ::base::samples::frame::Frame *frame_ptr = rightFrame.write_access();
+        frame_ptr->time = right_frame_sample->time;
+        frame_ptr->init(right_frame_sample->size.width, right_frame_sample->size.height, right_frame_sample->getDataDepth(), right_frame_sample->getFrameMode());
+        frameHelperRight.convert(*right_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
+        rightFrame.reset(frame_ptr);
+
+        /** Write the camera frame into the port **/
+        _right_frame_out.write(rightFrame);
+    }
 
     return;
 }
@@ -395,23 +403,27 @@ void Task::point_cloud_samplesTransformerCallback(const base::Time &ts, const ::
         return;
     }
 
-    base::samples::Pointcloud pointcloud;
-
-    /** Transform the point cloud in body frame **/
-    pointcloud.time = point_cloud_samples_sample.time;
-    pointcloud.points.resize(point_cloud_samples_sample.points.size());
-    pointcloud.colors = point_cloud_samples_sample.colors;
-    register int k = 0;
-    for (std::vector<base::Point>::const_iterator it = point_cloud_samples_sample.points.begin();
-        it != point_cloud_samples_sample.points.end(); it++)
+    if (state() == RUNNING)
     {
-        pointcloud.points[k] = tf * (*it);
-        k++;
+        base::samples::Pointcloud pointcloud;
+
+        /** Transform the point cloud in body frame **/
+        pointcloud.time = point_cloud_samples_sample.time;
+        pointcloud.points.resize(point_cloud_samples_sample.points.size());
+        pointcloud.colors = point_cloud_samples_sample.colors;
+        register int k = 0;
+        for (std::vector<base::Point>::const_iterator it = point_cloud_samples_sample.points.begin();
+            it != point_cloud_samples_sample.points.end(); it++)
+        {
+            pointcloud.points[k] = tf * (*it);
+            k++;
+        }
+
+        /** Write the point cloud into the port **/
+        _point_cloud_samples_out.write(pointcloud);
     }
 
-    /** Write the point cloud into the port **/
-    _point_cloud_samples_out.write(pointcloud);
-
+    return;
 }
 
 /// The following lines are template definitions for the various state machine
