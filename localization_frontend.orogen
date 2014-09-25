@@ -24,7 +24,7 @@ task_context "Task" do
     #**** Task Properties ****
     #*************************
     property('proprioceptive_output_frequency', 'double').
-        doc 'Output frequency of the proprioceptive sensors (joints, inertial sensors and orientation).'
+        doc 'Output frequency of the proprioceptive sensors samples (joints, inertial sensors and orientation).'
 
     property('navigation_source_frame', '/std/string').doc 'From Frame for the transformer'
 
@@ -40,6 +40,21 @@ task_context "Task" do
 
     property('jointNames', 'std/vector<std/string>').
 	doc 'Locomotion joints searching by names.'
+
+    #**********************************
+    #**** Exteroceptive Properties ****
+    #**********************************
+    property('exteroceptive_output_name', 'std/vector<std/string>').
+	doc 'Exteroceptive sensor names as input ports in the task.'
+
+    property('exteroceptive_output_distance',  'std/vector<double>').
+        doc 'Output estimated distance in meters between exteroceptive sensors samples (laser scans, camera images).'
+
+    property('exteroceptive_jointNames', 'std/vector<std/string>').
+	doc 'Locomotion joints searching by names in order to compute relative movement.'
+
+    property('wheelRadius', 'double').
+	doc 'Effective wheel radius average for odometry'
 
     #******************************
     #*** IIR Filter Properties ****
