@@ -205,6 +205,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             if(base::samples::RigidBodyState::isValidValue(cbReferencePoseSamples[0].orientation))
             {
                 heading = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];
+                //heading = 0.00;
             }
             else
             {
@@ -1013,6 +1014,8 @@ void Task::outputPortSamples()
     _inertial_samples_out.write(inertialSamplesOut);
 
     /** Orientation Samples  **/
+    orientationSamples[0].sourceFrame = _orientation_source_frame.get();
+    orientationSamples[0].targetFrame = _orientation_target_frame.get();
     _orientation_samples_out.write(orientationSamples[0]);
 
     /** Ground Truth if available **/

@@ -26,6 +26,10 @@ task_context "Task" do
     property('proprioceptive_output_frequency', 'double').
         doc 'Output frequency of the proprioceptive sensors samples (joints, inertial sensors and orientation).'
 
+    property('orientation_source_frame', '/std/string').doc 'From Frame for the transformer'
+
+    property('orientation_target_frame', '/std/string').doc 'To Frame for the transformer'
+
     property('navigation_source_frame', '/std/string').doc 'From Frame for the transformer'
 
     property('navigation_target_frame', '/std/string').doc 'To Frame for the transformer'
