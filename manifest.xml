@@ -21,5 +21,5 @@
   <depend package="drivers/orogen/transformer" />
   <depend package="image_processing/frame_helper"/>
   <depend package="slam/localization"/>
-
+  <tags>stable, localization</tags>
 </package>
