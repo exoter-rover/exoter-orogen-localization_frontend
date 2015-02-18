@@ -33,6 +33,7 @@ Task::Task(std::string const& name)
     world2navigationRbs.invalidate();
     world_osg2worldRbs.invalidate();
     referenceOut.invalidate();
+    delta_referenceOut.invalidate();
 
     /**********************************/
     /*** Internal Storage Variables ***/
@@ -71,7 +72,7 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 
     if (!initPosition)
     {
-        /** Set position **/
+        /** Set pose Tworld_navigation. First time is Tworld_body **/
         world2navigationRbs.position = cbReferencePoseSamples[0].position;
         world2navigationRbs.orientation = cbReferencePoseSamples[0].orientation;
 	
@@ -104,7 +105,7 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
     {
         /** Transform the reference pose world_body to navigation_body **/
         Eigen::Affine3d Tworld_body = cbReferencePoseSamples[0].getTransform();
-        cbReferencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);
+        cbReferencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);//Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
 
         /** At this point reference pose does not have info regarding linear or angular velocity **/
     }
@@ -188,13 +189,13 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
     /** Push one sample into the buffer **/
     cbOrientationSamples.push_front(orientation_samples_sample);
 
-    /** Transform the orientation world(osg)_imu to world_body **/
-    cbOrientationSamples[0].orientation = orientation_samples_sample.orientation * qtf.inverse(); // Tworld_body = Tworld_imu * (Tbody_imu)^-1
-    cbOrientationSamples[0].cov_orientation = orientation_samples_sample.cov_orientation * tf.rotation().inverse(); // Tworld_body = Tworld_imu * (Tbody_imu)^-1
+    /** Transform the orientation world(osg)_imu to world(osg)_body **/
+    cbOrientationSamples[0].orientation = orientation_samples_sample.orientation * qtf.inverse(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
+    cbOrientationSamples[0].cov_orientation = orientation_samples_sample.cov_orientation * tf.rotation().inverse(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
 
     if(!initAttitude)
     {
-        Eigen::Quaterniond attitude = cbOrientationSamples[0].orientation;
+        Eigen::Quaterniond attitude = cbOrientationSamples[0].orientation; //Tworld(osg)_body
 
         /** Check if there is initial pose connected **/
         if (_reference_pose_samples.connected() && initPosition)
@@ -217,7 +218,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
                     Eigen::AngleAxisd(attitude.toRotationMatrix().eulerAngles(2,1,0)[1], Eigen::Vector3d::UnitY()) *
                     Eigen::AngleAxisd(attitude.toRotationMatrix().eulerAngles(2,1,0)[2], Eigen::Vector3d::UnitX()));
 
-            attitude.normalize();
+            attitude.normalize(); //Tworld_body
 
             /** Compute the world_osg to world frame **/
             world_osg2worldRbs.orientation = cbOrientationSamples[0].orientation * attitude.inverse();//Tworld_osg_world = Tworld_osg_body * (Tworld_body)^-1
@@ -233,7 +234,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             world2navigationRbs.cov_position = Eigen::Matrix <double, 3 , 3>::Zero();
             world2navigationRbs.cov_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
 
-            /** Compute the world_osg to world frame **/
+            /** Compute the world_osg to world frame. Make world_osg and world coincident **/
             world_osg2worldRbs.orientation.setIdentity();
 
             initPosition = true;
@@ -244,7 +245,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
         if (initAttitude)
         {
             /** Store the value as the initial one for the world to navigation **/
-            world2navigationRbs.orientation = attitude;
+            world2navigationRbs.orientation = attitude; //At the first sample Tworld_body is Tworld_navigation
             world2navigationRbs.angular_velocity.setZero();
 
             /** Assume very well know initial attitude **/
@@ -280,12 +281,13 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
     }
     else
     {
-        /** Transform the orientation world(osg)_body to navigation_body **/
-        Eigen::Quaterniond qnavigation_world_osg((world_osg2worldRbs.orientation * world2navigationRbs.orientation).inverse());
-        cbOrientationSamples[0].orientation = qnavigation_world_osg * cbOrientationSamples[0].orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
-        cbOrientationSamples[0].cov_orientation = qnavigation_world_osg.toRotationMatrix() * cbOrientationSamples[0].cov_orientation; // Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
-    }
+        /** We want the orientation with respect to the fixed local frame Navigation frame **/
+        Eigen::Quaterniond qnavigation_world_osg(world2navigationRbs.orientation.inverse() * world_osg2worldRbs.orientation.inverse());//Tnavigation_world(osg) = (Tworld*navigation)^-1 * (Tworld(osg)_world)^-1
 
+        /** Transform the orientation world(osg)_body to navigation_body **/
+        cbOrientationSamples[0].orientation = qnavigation_world_osg * cbOrientationSamples[0].orientation; // Tnavigation_body = (Tworld(osg)_navigation)^-1 * Tworld(osg)_body
+        cbOrientationSamples[0].cov_orientation = qnavigation_world_osg.toRotationMatrix() * cbOrientationSamples[0].cov_orientation; // Tnavigation_body = (Tworld(osg)_navigation)^-1 * Tworld(osg)_body
+    }
 }
 
 void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample)
@@ -513,6 +515,9 @@ bool Task::configureHook()
     referenceOut.sourceFrame = _reference_source_frame.get();
     referenceOut.targetFrame = _reference_target_frame.get();
 
+    delta_referenceOut.invalidate();
+    delta_referenceOut.sourceFrame = _delta_reference_source_frame.get();
+    delta_referenceOut.targetFrame = _delta_reference_target_frame.get();
 
     /******************************************/
     /** Use properties to Configure the Task **/
@@ -1034,13 +1039,13 @@ void Task::calculateVelocities()
         if (!::base::samples::RigidBodyState::isValidValue(referencePoseSamples[0].velocity))
         {
             /** Array of zero is the newest sample **/
-            referencePoseSamples[0].velocity = (referencePoseSamples[0].position - referencePoseSamples[referencePoseSamples.size()-1].position)/delta_t;
+            referencePoseSamples[0].velocity = (referencePoseSamples[0].position - referencePoseSamples[referencePoseSamples.size()-1].position)/((referencePoseSamples.size()-1)*delta_t);
         }
 
         if (!::base::samples::RigidBodyState::isValidCovariance(referencePoseSamples[0].cov_velocity))
         {
             /** Array of zero is the newest sample **/
-            referencePoseSamples[0].cov_velocity = (referencePoseSamples[0].cov_position  - referencePoseSamples[referencePoseSamples.size()-1].cov_position)/(delta_t * delta_t);//No considering covariance just variance
+            referencePoseSamples[0].cov_velocity = (referencePoseSamples[0].cov_position  - referencePoseSamples[referencePoseSamples.size()-1].cov_position)/((referencePoseSamples.size()-1) * delta_t * delta_t);
         }
 
         /** Angular Velocities **/
@@ -1048,13 +1053,13 @@ void Task::calculateVelocities()
         {
             /** Array of zero is the newest sample **/
             Eigen::AngleAxisd deltaAngleaxis(referencePoseSamples[referencePoseSamples.size()-1].orientation.inverse() * referencePoseSamples[0].orientation);
-            referencePoseSamples[0].angular_velocity = (deltaAngleaxis.angle() * deltaAngleaxis.axis())/delta_t;
+            referencePoseSamples[0].angular_velocity = (deltaAngleaxis.angle() * deltaAngleaxis.axis())/((referencePoseSamples.size()-1)*delta_t);
         }
 
         if (!::base::samples::RigidBodyState::isValidCovariance(referencePoseSamples[0].cov_angular_velocity))
         {
             /** Array of zero is the newest sample **/
-            referencePoseSamples[0].cov_angular_velocity = (referencePoseSamples[0].cov_orientation  - referencePoseSamples[referencePoseSamples.size()-1].cov_orientation)/(delta_t * delta_t);
+            referencePoseSamples[0].cov_angular_velocity = (referencePoseSamples[0].cov_orientation  - referencePoseSamples[referencePoseSamples.size()-1].cov_orientation)/((referencePoseSamples.size()-1) * delta_t * delta_t);
         }
     }
 
@@ -1101,11 +1106,11 @@ void Task::outputPortSamples()
         _reference_pose_samples_out.write(referenceOut);
 
         /** Delta increments of the ground truth at delta_t given by the output_frequency **/
-        referenceOut.position = referencePoseSamples[0].position - referencePoseSamples[1].position;
-        referenceOut.cov_position = referencePoseSamples[0].cov_position + referencePoseSamples[1].cov_position;
-        referenceOut.velocity = (referencePoseSamples[0].velocity - referencePoseSamples[1].velocity);//in navigation frame
-        referenceOut.cov_velocity = (referencePoseSamples[0].cov_velocity + referencePoseSamples[1].cov_velocity);
-        _reference_delta_pose_samples_out.write(referenceOut);
+        delta_referenceOut.position = referencePoseSamples[0].position - referencePoseSamples[1].position;
+        delta_referenceOut.cov_position = referencePoseSamples[0].cov_position - referencePoseSamples[1].cov_position;
+        delta_referenceOut.orientation = referencePoseSamples[1].orientation.inverse() * referencePoseSamples[0].orientation; //(T_k-1)^-1 * Tk
+        delta_referenceOut.cov_orientation = (referencePoseSamples[0].cov_orientation - referencePoseSamples[1].cov_orientation);
+        _reference_delta_pose_samples_out.write(delta_referenceOut);
     }
 
     /** Port-out the estimated world 2 navigation transform **/

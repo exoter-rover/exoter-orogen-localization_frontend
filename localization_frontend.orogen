@@ -38,6 +38,10 @@ task_context "Task" do
 
     property('reference_target_frame', '/std/string').doc 'To Frame for the transformer'
 
+    property('delta_reference_source_frame', '/std/string').doc 'From Frame for the transformer'
+
+    property('delta_reference_target_frame', '/std/string').doc 'To Frame for the transformer'
+
     property('world_source_frame', '/std/string').doc 'From Frame for the transformer'
 
     property('world_target_frame', '/std/string').doc 'To Frame for the transformer'

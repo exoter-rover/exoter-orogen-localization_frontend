@@ -39,10 +39,9 @@ namespace localization_frontend {
         }
 
        	unsigned int jointsSamples; /** counter for encoders samples**/
- 	unsigned int imuSamples; /** counter of inertial sensors samples **/
- 	unsigned int orientationSamples; /** counter of orientation samples **/
- 	unsigned int referencePoseSamples; /** counter of pose information coming from external measurement **/
-
+     	unsigned int imuSamples; /** counter of inertial sensors samples **/
+     	unsigned int orientationSamples; /** counter of orientation samples **/
+     	unsigned int referencePoseSamples; /** counter of pose information coming from external measurement **/
     };
 
     /** Number of samples to process in the callback function **/
@@ -57,10 +56,10 @@ namespace localization_frontend {
             return;
         }
 
-	unsigned int jointsSamples; /** number of encoders samples for the re-sampling**/
- 	unsigned int imuSamples; /** number of inertial sensors samples **/
- 	unsigned int orientationSamples; /** number of orientation samples **/
- 	unsigned int referencePoseSamples; /** number of pose information coming from external measurement **/
+        unsigned int jointsSamples; /** number of encoders samples for the re-sampling**/
+        unsigned int imuSamples; /** number of inertial sensors samples **/
+        unsigned int orientationSamples; /** number of orientation samples **/
+        unsigned int referencePoseSamples; /** number of pose information coming from external measurement **/
     };
 
     /** Input port samples arrived ON/OFF flags **/
@@ -187,6 +186,9 @@ namespace localization_frontend {
 
         /** Ground truth out coming for an external system (if available like Vicon or GPS) */
         base::samples::RigidBodyState referenceOut;
+
+        /** Delta pose ground truth out coming for an external system (if available like Vicon or GPS) */
+        base::samples::RigidBodyState delta_referenceOut;
 
         /** Calculated initial navigation frame pose expressed in world frame */
         base::samples::RigidBodyState world2navigationRbs;
