@@ -1038,7 +1038,7 @@ void Task::calculateVelocities()
         /** Linear Velocities **/
         if (!::base::samples::RigidBodyState::isValidValue(referencePoseSamples[0].velocity))
         {
-            /** Array of zero is the newest sample **/
+            /** Array of zero is the newest sample. delta_Tnavigation_body/delta_t **/
             referencePoseSamples[0].velocity = (referencePoseSamples[0].position - referencePoseSamples[referencePoseSamples.size()-1].position)/((referencePoseSamples.size()-1)*delta_t);
         }
 
@@ -1051,9 +1051,9 @@ void Task::calculateVelocities()
         /** Angular Velocities **/
         if (!::base::samples::RigidBodyState::isValidValue(referencePoseSamples[0].angular_velocity))
         {
-            /** Array of zero is the newest sample **/
-            Eigen::AngleAxisd deltaAngleaxis(referencePoseSamples[referencePoseSamples.size()-1].orientation.inverse() * referencePoseSamples[0].orientation);
-            referencePoseSamples[0].angular_velocity = (deltaAngleaxis.angle() * deltaAngleaxis.axis())/((referencePoseSamples.size()-1)*delta_t);
+            /** Array of zero is the newest sample. delta_qnavigation_body = qnavigation_body_k-1 * angular_velocity_body_k-1_body **/
+            Eigen::AngleAxisd deltaAngleaxis(referencePoseSamples[referencePoseSamples.size()-1].orientation.inverse() * referencePoseSamples[0].orientation);//quaternion_body_k-1_body
+            referencePoseSamples[0].angular_velocity = referencePoseSamples[referencePoseSamples.size()-1].orientation * (deltaAngleaxis.angle() * deltaAngleaxis.axis())/((referencePoseSamples.size()-1)*delta_t);
         }
 
         if (!::base::samples::RigidBodyState::isValidCovariance(referencePoseSamples[0].cov_angular_velocity))
@@ -1106,10 +1106,12 @@ void Task::outputPortSamples()
         _reference_pose_samples_out.write(referenceOut);
 
         /** Delta increments of the ground truth at delta_t given by the output_frequency **/
-        delta_referenceOut.position = referencePoseSamples[0].position - referencePoseSamples[1].position;
-        delta_referenceOut.cov_position = referencePoseSamples[0].cov_position - referencePoseSamples[1].cov_position;
-        delta_referenceOut.orientation = referencePoseSamples[1].orientation.inverse() * referencePoseSamples[0].orientation; //(T_k-1)^-1 * Tk
-        delta_referenceOut.cov_orientation = (referencePoseSamples[0].cov_orientation - referencePoseSamples[1].cov_orientation);
+        delta_referenceOut.time = referencePoseSamples[0].time;
+        delta_referenceOut.position = referencePoseSamples[1].orientation.inverse() * (referencePoseSamples[0].position - referencePoseSamples[1].position);//position_k-1_k = (qnavigation_body_k-1)^-1 * (position_navigation_k - position_navigation_k-1)
+        Eigen::Affine3d qnavigation_body_k_1(referencePoseSamples[1].orientation);
+        delta_referenceOut.cov_position = qnavigation_body_k_1.rotation().transpose() * (referencePoseSamples[0].cov_position - referencePoseSamples[1].cov_position) * qnavigation_body_k_1.rotation();
+        delta_referenceOut.orientation = referencePoseSamples[1].orientation.inverse() * referencePoseSamples[0].orientation; //delta quaternion = (T_k-1)^-1 * Tk
+        delta_referenceOut.cov_orientation = qnavigation_body_k_1.rotation().transpose() * (referencePoseSamples[0].cov_orientation - referencePoseSamples[1].cov_orientation) * qnavigation_body_k_1.rotation();
         _reference_delta_pose_samples_out.write(delta_referenceOut);
     }
 
