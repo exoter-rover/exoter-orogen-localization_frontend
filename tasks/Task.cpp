@@ -77,28 +77,28 @@ void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const
 	
         world2navigationRbs.velocity.setZero();
 
-	/** Assume well known starting position **/
-	world2navigationRbs.cov_position = Eigen::Matrix3d::Zero();
-	world2navigationRbs.cov_velocity = Eigen::Matrix3d::Zero();
-	
-	#ifdef DEBUG_PRINTS
-	Eigen::Matrix <double,3,1> euler; /** In Euler angles **/
-	euler[2] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];//Yaw
-	euler[1] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[1];//Pitch
-	euler[0] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[2];//Roll
- 	std::cout<<"** [EXOTER REFERENCE-POSE]cbReferencePoseSamples at ("<<cbReferencePoseSamples[0].time.toMicroseconds()<< ")**\n";
-	std::cout<<"** position(world_frame)\n"<< cbReferencePoseSamples[0].position<<"\n";
-	std::cout<<"** Roll: "<<euler[0]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[2]*R2D<<"\n";
-	#endif
+        /** Assume well known starting position **/
+        world2navigationRbs.cov_position = Eigen::Matrix3d::Zero();
+        world2navigationRbs.cov_velocity = Eigen::Matrix3d::Zero();
 
-	/** Initial angular velocity **/
-	world2navigationRbs.angular_velocity.setZero();
-	
-	/** Assume very well know initial attitude **/
-	world2navigationRbs.cov_orientation = Eigen::Matrix <double, 3 , 3>::Zero();
-	world2navigationRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
-		
-	initPosition = true;
+        #ifdef DEBUG_PRINTS
+        Eigen::Matrix <double,3,1> euler; /** In Euler angles **/
+        euler[2] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];//Yaw
+        euler[1] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[1];//Pitch
+        euler[0] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[2];//Roll
+        std::cout<<"** [EXOTER REFERENCE-POSE]cbReferencePoseSamples at ("<<cbReferencePoseSamples[0].time.toMicroseconds()<< ")**\n";
+        std::cout<<"** position(world_frame)\n"<< cbReferencePoseSamples[0].position<<"\n";
+        std::cout<<"** Roll: "<<euler[0]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[2]*R2D<<"\n";
+        #endif
+
+        /** Initial angular velocity **/
+        world2navigationRbs.angular_velocity.setZero();
+
+        /** Assume very well know initial attitude **/
+        world2navigationRbs.cov_orientation = Eigen::Matrix <double, 3 , 3>::Zero();
+        world2navigationRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
+
+        initPosition = true;
     }
     else if (initAttitude)
     {
@@ -205,7 +205,6 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             if(base::samples::RigidBodyState::isValidValue(cbReferencePoseSamples[0].orientation))
             {
                 heading = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];
-                //heading = 0.00;
             }
             else
             {
@@ -221,7 +220,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             attitude.normalize();
 
             /** Compute the world_osg to world frame **/
-            world_osg2worldRbs.orientation = cbOrientationSamples[0].orientation * attitude.inverse();//Tworld_osg_body * (Tworld_body)^-1
+            world_osg2worldRbs.orientation = cbOrientationSamples[0].orientation * attitude.inverse();//Tworld_osg_world = Tworld_osg_body * (Tworld_body)^-1
 
             initAttitude = true;
         }
@@ -291,8 +290,24 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 
 void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample)
 {
+    base::samples::Joints joints;
+    joints.resize(odometry_jointNames.size());
+    joints.time = joints_samples_sample.time;
+    joints.names = odometry_jointNames;
+
     /** A new sample arrived to the Input port **/
-    cbJointsSamples.push_front(joints_samples_sample);
+    for(std::vector<std::string>::const_iterator it = odometry_jointNames.begin(); it != odometry_jointNames.end(); it++)
+    {
+        try
+        {
+            joints[*it] = joints_samples_sample.getElementByName(*it);
+        } catch(base::samples::Joints::InvalidName ex){
+            joints[*it].position = 0.00;
+            joints[*it].speed = base::NaN<double>();
+        }
+    }
+
+    cbJointsSamples.push_front(joints);
 
     /** Increment counter **/
     counter.jointsSamples++;
@@ -467,7 +482,11 @@ bool Task::configureHook()
     /** Read configuration **/
     /************************/
     proprioceptive_output_frequency = _proprioceptive_output_frequency.value();
-    jointNames = _jointNames.value();
+    odometry_jointNames = _odometry_jointNames.value();
+    zero_position_jointNames = _zero_position_jointNames.value();
+    zero_speed_jointNames = _zero_speed_jointNames.value();
+    mimic_jointNames = _mimic_jointNames.value();
+    translation_jointNames = _translation_jointNames.value();
     filterConfig = _filter_config.value();
     filter_jointNames = _filter_jointNames.value();
 
@@ -488,6 +507,14 @@ bool Task::configureHook()
     world_osg2worldRbs.targetFrame = _world_target_frame.get();
 
     /******************************************/
+    /** Reference Ground truth transform     **/
+    /******************************************/
+    referenceOut.invalidate();
+    referenceOut.sourceFrame = _reference_source_frame.get();
+    referenceOut.targetFrame = _reference_target_frame.get();
+
+
+    /******************************************/
     /** Use properties to Configure the Task **/
     /******************************************/
 
@@ -497,10 +524,10 @@ bool Task::configureHook()
     /** Set the number of samples between each sensor input (if there are not coming at the same sampling rate) */
     if (proprioceptive_output_frequency != 0.00)
     {
-	number.imuSamples = (1.0/_inertial_samples_period.value())/proprioceptive_output_frequency;
-	number.jointsSamples = (1.0/_joints_samples_period.value())/proprioceptive_output_frequency;
-	number.orientationSamples = (1.0/_orientation_samples_period.value())/proprioceptive_output_frequency;
-	number.referencePoseSamples = std::max((1.0/_reference_pose_samples_period.value())/proprioceptive_output_frequency, 1.0);
+        number.imuSamples = (1.0/_inertial_samples_period.value())/proprioceptive_output_frequency;
+        number.jointsSamples = (1.0/_joints_samples_period.value())/proprioceptive_output_frequency;
+        number.orientationSamples = (1.0/_orientation_samples_period.value())/proprioceptive_output_frequency;
+        number.referencePoseSamples = std::max((1.0/_reference_pose_samples_period.value())/proprioceptive_output_frequency, 1.0);
     }
 
     #ifdef DEBUG_PRINTS
@@ -525,32 +552,32 @@ bool Task::configureHook()
 
     for(register unsigned int i=0; i<cbJointsSamples.size(); ++i)
     {
-	cbJointsSamples[i].resize(jointNames.size());
+    	cbJointsSamples[i].resize(odometry_jointNames.size());
     }
 
     /** Initialize the samples for the filtered buffer joint values **/
-    for(register unsigned int i=0;i<jointsSamples.size();i++)
+    for(register unsigned int i=0; i<jointsSamples.size(); i++)
     {
-	/** Sizing the joints **/
-	jointsSamples[i].resize(jointNames.size());
+    	/** Sizing the joints **/
+	    jointsSamples[i].resize(odometry_jointNames.size());
     }
 
     /** Initialize the samples for the filtered buffer imuSamples values **/
     for(register unsigned int i=0; i<imuSamples.size();++i)
     {
-	/** IMU Samples **/
-	imuSamples[i].acc[0] = base::NaN<double>();
-	imuSamples[i].acc[1] = base::NaN<double>();
-	imuSamples[i].acc[2] = base::NaN<double>();
-	imuSamples[i].gyro = imuSamples[0].acc;
-	imuSamples[i].mag = imuSamples[0].acc;
+        /** IMU Samples **/
+        imuSamples[i].acc[0] = base::NaN<double>();
+        imuSamples[i].acc[1] = base::NaN<double>();
+        imuSamples[i].acc[2] = base::NaN<double>();
+        imuSamples[i].gyro = imuSamples[0].acc;
+        imuSamples[i].mag = imuSamples[0].acc;
     }
 
     /** Initialize the samples for the filtered buffer Reference Pose Samples values **/
     for(register unsigned int i=0; i<referencePoseSamples.size(); ++i)
     {
-	/** Pose Init **/
-	referencePoseSamples[i].invalidate();
+        /** Pose Init **/
+        referencePoseSamples[i].invalidate();
     }
 
     #ifdef DEBUG_PRINTS
@@ -561,8 +588,8 @@ bool Task::configureHook()
     #endif
 
     /** Output Joints state vector **/
-    jointsSamplesOut.resize(jointNames.size());
-    jointsSamplesOut.names = jointNames;
+    jointsSamplesOut.resize(odometry_jointNames.size());
+    jointsSamplesOut.names = odometry_jointNames;
 
 
     /** Output images **/
@@ -630,13 +657,14 @@ bool Task::configureHook()
     {
         RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] The number of joints to perform the filter has to be "<<FILTER_VECTOR_SIZE<<RTT::endlog();
         RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] Otherwise change the FILTER_VECTOR_SIZE constant in the code."<<RTT::endlog();
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] This is because low_pass_filter was designed as template class ."<<RTT::endlog();
         return false;
     }
 
     for(std::vector<std::string>::const_iterator it_name = filter_jointNames.begin(); it_name != filter_jointNames.end(); it_name++)
     {
-        std::vector<std::string>::const_iterator it = find(jointNames.begin(), jointNames.end(), *it_name);
-        if (it == jointNames.end())
+        std::vector<std::string>::const_iterator it = find(odometry_jointNames.begin(), odometry_jointNames.end(), *it_name);
+        if (it == odometry_jointNames.end())
             throw std::runtime_error("[Localization Front-End] [FATAL ERROR]: Joints names for filter must be contained in all joints names property.");
     }
 
@@ -700,7 +728,7 @@ void Task::inputPortSamples()
     base::samples::RigidBodyState reference_pose;
 
     /** Sizing the joints **/
-    joint.resize(jointNames.size());
+    joint.resize(odometry_jointNames.size());
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[GetInportValue] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
@@ -719,15 +747,19 @@ void Task::inputPortSamples()
         joint[j].position = 0.00;
         joint[j].speed = 0.00;
         joint[j].effort = 0.00;
+        joint[j].raw = 0.00;
 
         for (register size_t i = 0; i<cbJointsSamples.size(); ++i)
         {
-	    joint[j].speed += cbJointsSamples[i][j].speed;
-	    joint[j].effort += cbJointsSamples[i][j].effort;
-	}
+	        joint[j].speed += cbJointsSamples[i][j].speed;
+    	    joint[j].effort += cbJointsSamples[i][j].effort;
+    	    joint[j].raw += cbJointsSamples[i][j].raw;
+	    }
+
         joint[j].position = cbJointsSamples[0][j].position;
         joint[j].speed /= cbJointsSize;
         joint[j].effort /= cbJointsSize;
+        joint[j].raw /= cbJointsSize;
     }
 
     if (cbJointsSize > 0.0)
@@ -738,9 +770,9 @@ void Task::inputPortSamples()
         /** Set the time **/
         joint.time = (cbJointsSamples[cbJointsSize-1].time + cbJointsSamples[0].time)/2.0;
 
-        /** ****** **/
+        /** ********* **/
         /**  FILTER   **/
-        /** ****** **/
+        /** ********* **/
 
         /** Low-pass Filter **/
         if (filterConfig.filterOn)
@@ -766,6 +798,26 @@ void Task::inputPortSamples()
             }
         }
 
+        /** *************** **/
+        /**  MIMIC JOINTS   **/
+        /** *************** **/
+        register int idx = 0;
+        for(std::vector<std::string>::const_iterator it = mimic_jointNames.names.begin(); it != mimic_jointNames.names.end(); it++)
+        {
+            joint[*it].position = -joint.getElementByName(mimic_jointNames.elements[idx]).position;
+            idx++;
+        }
+
+        /** ********************* **/
+        /**  TRANSLATION JOINTS   **/
+        /** ********************* **/
+        idx = 0;
+        for(std::vector<std::string>::const_iterator it = translation_jointNames.names.begin(); it != translation_jointNames.names.end(); it++)
+        {
+            joint[*it].position = _wheelRadius.value() * joint.getElementByName(translation_jointNames.elements[idx]).position;
+            joint[*it].speed = _wheelRadius.value() * joint.getElementByName(translation_jointNames.elements[idx]).speed;
+            idx++;
+        }
 
         /** Push the result in the buffer **/
         jointsSamples.push_front(joint);
@@ -889,13 +941,6 @@ void Task::inputPortSamples()
         imuSamples.push_front(imu);
     }
 
-    /*****************************/
-    /** Store the Joint values  **/
-    /*****************************/
-    for (register int i=0; i<static_cast<int> ((joint.size())); ++i)
-    {
-        jointsSamplesOut[i].position = joint[i].position;
-    }
 
     /** Set all counters to zero **/
     counter.reset();
@@ -947,11 +992,11 @@ void Task::calculateVelocities()
             #endif
 
             /** At least two values to perform the derivative **/
-            jointsSamplesOut[jointIdx].speed = (joint_state.position - prev_joint_state.position)/std::max(jointsDelta_t.toSeconds(),delta_t);
+            joints[jointIdx].speed = (joint_state.position - prev_joint_state.position)/std::max(jointsDelta_t.toSeconds(),delta_t);
         }
         else
         {
-            jointsSamplesOut[jointIdx].speed = joint_state.speed;
+            joints[jointIdx].speed = joint_state.speed;
         }
 
         #ifdef DEBUG_PRINTS
@@ -960,8 +1005,27 @@ void Task::calculateVelocities()
         std::cout<<"[CALCULATING_VELO] ********************************************* \n";
         #endif
 
+        /** Set to Zero position joints **/
+        std::vector<std::string>::const_iterator zerop = find(zero_position_jointNames.begin(), zero_position_jointNames.end(), *it);
+        if (zerop != zero_position_jointNames.end())
+        {
+            joints[jointIdx].position = 0.00;
+        }
+
+        /** Set to Zero position joints **/
+        std::vector<std::string>::const_iterator zeros = find(zero_speed_jointNames.begin(), zero_speed_jointNames.end(), *it);
+        if (zeros != zero_speed_jointNames.end())
+        {
+            joints[jointIdx].speed = 0.00;
+        }
+
+
         jointIdx++;
     }
+    /*****************************/
+    /** Store the Joint values  **/
+    /*****************************/
+    jointsSamplesOut = joints;
 
     /** Mean velocities for the Reference Pose **/
     if (static_cast<int>(referencePoseSamples.size()) > 1)
@@ -1006,8 +1070,11 @@ void Task::outputPortSamples()
     /*******************************************/
 
     /** Joint samples out **/
-    jointsSamplesOut.time = jointsSamples[0].time;
-    _joints_samples_out.write(jointsSamplesOut);
+    base::samples::Joints jointsOut;
+    jointsOut = jointsSamplesOut;
+    jointsOut.time = jointsSamples[0].time;
+
+    _joints_samples_out.write(jointsOut);
 
     /** Calibrated and compensate inertial values **/
     inertialSamplesOut = imuSamples[0];
@@ -1022,7 +1089,15 @@ void Task::outputPortSamples()
     if (_reference_pose_samples.connected())
     {
         /** Port Out the info coming from the ground truth **/
-        referenceOut = referencePoseSamples[0];
+        referenceOut.time = referencePoseSamples[0].time;
+        referenceOut.position = referencePoseSamples[0].position;
+        referenceOut.cov_position = referencePoseSamples[0].cov_position;
+        referenceOut.orientation = referencePoseSamples[0].orientation;
+        referenceOut.cov_orientation = referencePoseSamples[0].cov_orientation;
+        referenceOut.velocity = referencePoseSamples[0].velocity;
+        referenceOut.cov_velocity = referencePoseSamples[0].cov_velocity;
+        referenceOut.angular_velocity = referencePoseSamples[0].angular_velocity;
+        referenceOut.cov_angular_velocity = referencePoseSamples[0].cov_angular_velocity;
         _reference_pose_samples_out.write(referenceOut);
 
         /** Delta increments of the ground truth at delta_t given by the output_frequency **/

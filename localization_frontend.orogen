@@ -42,23 +42,35 @@ task_context "Task" do
 
     property('world_target_frame', '/std/string').doc 'To Frame for the transformer'
 
-    property('jointNames', 'std/vector<std/string>').
-	doc 'Locomotion joints searching by names.'
+    property('odometry_jointNames', 'std/vector<std/string>').
+	    doc 'Locomotion joints searching by names.'
+
+    property('zero_position_jointNames', 'std/vector<std/string>').
+    	doc 'Locomotion joints sub-vector searching by names to set the position to zero. Empty by default'
+
+    property('zero_speed_jointNames', 'std/vector<std/string>').
+    	doc 'Locomotion joints sub-vector searching by names to set the speed to zero. Empty by default'
+
+    property('mimic_jointNames', 'localization_frontend::NamedVectorString').
+    	doc 'Joints which use other joints to mimic motion (position and velocity). Empty by default'
+
+    property('translation_jointNames', 'localization_frontend::NamedVectorString').
+    	doc 'Joints which use other joints to convert angular rotation to translational displacement (position and speed). Empty by default'
 
     #**********************************
     #**** Exteroceptive Properties ****
     #**********************************
     property('exteroceptive_output_name', 'std/vector<std/string>').
-	doc 'Exteroceptive sensor names as input ports in the task.'
+	    doc 'Exteroceptive sensor names as input ports in the task.'
 
     property('exteroceptive_output_distance',  'std/vector<double>').
         doc 'Output estimated distance in meters between exteroceptive sensors samples (laser scans, camera images).'
 
     property('exteroceptive_jointNames', 'std/vector<std/string>').
-	doc 'Locomotion joints searching by names in order to compute relative movement.'
+    	doc 'Locomotion joints searching by names in order to compute relative movement.'
 
     property('wheelRadius', 'double').
-	doc 'Effective wheel radius average for odometry'
+    	doc 'Effective wheel radius average for odometry'
 
     #******************************
     #*** IIR Filter Properties ****
@@ -67,7 +79,7 @@ task_context "Task" do
         doc 'Configuration values to run the IIR/FIR filter over the noisy passive joints. Look in Types for further details.'
 
     property('filter_jointNames', 'std/vector<std/string>').
-	doc 'Joints in which the filter wants to be apply. These joints names MUST be also contained in the jointNames. '+
+    	doc 'Joints in which the filter wants to be apply. These joints names MUST be also contained in the jointNames. '+
         'Maximum number of three joints. In case more joints are required you need to change the code due to template classes. FILTER_VECTOR_SIZE'
 
     #******************************
@@ -86,7 +98,7 @@ task_context "Task" do
     #******* Proprioceptive sensors *********
     input_port('joints_samples', '/base/samples/Joints').
         needs_reliable_connection.
-	doc 'Timestamped robot joints.'
+    	doc 'Timestamped robot joints.'
 
     input_port('inertial_samples', '/base/samples/IMUSensors').
         needs_reliable_connection.
@@ -104,7 +116,7 @@ task_context "Task" do
         doc 'Right camera frame.'
 
     input_port('point_cloud_samples', '/base/samples/Pointcloud').
-	doc 'timestamped laser scans'
+    	doc 'timestamped laser scans'
 
     #******* External Ground Truth *********
     input_port("reference_pose_samples", "/base/samples/RigidBodyState").
@@ -116,16 +128,16 @@ task_context "Task" do
     # to compute the sensor output in body frame.
     ##############################################
     transformer do
-	transform "imu", "body" # imu to body in "Source in target" convention
+	    transform "imu", "body" # imu to body in "Source in target" convention
         transform "laser", "body" # laser to body in "Source in target" convention
-	align_port("joints_samples", 0.04)
-	align_port("inertial_samples", 0.04)
-	align_port("orientation_samples", 0.008)
-	align_port("left_frame", 0.5)
-	align_port("right_frame", 0.5)
-	align_port("point_cloud_samples", 0.025)
-	align_port("reference_pose_samples", 0.01)
-	max_latency(1.0)
+    	align_port("joints_samples", 0.04)
+    	align_port("inertial_samples", 0.04)
+    	align_port("orientation_samples", 0.008)
+    	align_port("left_frame", 0.5)
+    	align_port("right_frame", 0.5)
+    	align_port("point_cloud_samples", 0.025)
+    	align_port("reference_pose_samples", 0.01)
+    	max_latency(1.0)
     end
 
     #******************************
@@ -133,16 +145,16 @@ task_context "Task" do
     #******************************
 
     output_port('joints_samples_out', '/base/samples/Joints').
-	doc 'Timestamped joints (active and passive) state samples providing odometry information.'
+    	doc 'Timestamped joints (active and passive) state samples providing odometry information.'
 
     output_port('inertial_samples_out', '/base/samples/IMUSensors').
-	doc 'Calibrated and compensated inertial measurements.'
+    	doc 'Calibrated and compensated inertial measurements.'
 
     output_port('orientation_samples_out', '/base/samples/RigidBodyState').
-	doc 'Orientation samples measurements.'
+    	doc 'Orientation samples measurements.'
 
     output_port('point_cloud_samples_out', 'base/samples/Pointcloud').
-	doc 'Point cloud samples.'
+    	doc 'Point cloud samples.'
 
     output_port("left_frame_out", ro_ptr('base::samples::frame::Frame')).
         doc 'Undistorted Left camera frame (after synchronization with the dynamixel)'
@@ -151,31 +163,31 @@ task_context "Task" do
         doc 'Undistorted Right camera frame (after synchronization with the dynamixel).'
 
     output_port('reference_pose_samples_out', 'base/samples/RigidBodyState').
-	doc 'Pose and velocities computed by the ground truth system.'
+    	doc 'Pose and velocities computed by the ground truth system.'
 
     output_port('reference_delta_pose_samples_out', 'base/samples/RigidBodyState').
-	doc 'Delta pose and velocities computed from the ground truth system.'
+    	doc 'Delta pose and velocities computed from the ground truth system.'
 
     output_port('world_osg_to_world_out', 'base/samples/RigidBodyState').
-	doc 'Transformation for the transformer: world_osg frame (North-East-Up) expressed in the estimated intermediate world frame.'
+    	doc 'Transformation for the transformer: world_osg frame (North-East-Up) expressed in the estimated intermediate world frame.'
 
     output_port('world_to_navigation_out', 'base/samples/RigidBodyState').
-	doc 'Transformation for the transformer: navigation frame (initial starting point) expressed in the world frame.'
+    	doc 'Transformation for the transformer: navigation frame (initial starting point) expressed in the world frame.'
 
     #**********************************
     #******* Output Debug Ports *******
     #**********************************
     property('output_debug', 'bool', false).
-	doc 'Set to true if output debug information is desirable.'
+    	doc 'Set to true if output debug information is desirable.'
 
     output_port('angular_position', 'double').
-	doc 'Angular position of the FL wheel'
+    	doc 'Angular position of the FL wheel'
 
     output_port('angular_rate', 'double').
-	doc 'Angular velocity of the FL wheel'
+    	doc 'Angular velocity of the FL wheel'
 
     output_port('angular_rate_old', 'double').
-	doc 'Angular velocity of the FL wheel(using 2nd order)'
+    	doc 'Angular velocity of the FL wheel(using 2nd order)'
 
     #*********************************
     #******* Extra Task States *******

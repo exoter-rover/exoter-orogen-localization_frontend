@@ -4,9 +4,15 @@
 #include <vector>
 #include <base/time.h>
 #include <base/eigen.h>
+#include <base/NamedVector.hpp>
 
 namespace localization_frontend
 {
+
+    class NamedVectorString : public ::base::NamedVector<std::string>
+    {
+    };
+
     /** Coefficient for the filter **/
     struct FilterCoefficients
     {

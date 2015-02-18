@@ -128,7 +128,15 @@ namespace localization_frontend {
 
         double proprioceptive_output_frequency;
 
-        std::vector<std::string> jointNames;
+        std::vector<std::string> odometry_jointNames;
+
+        std::vector<std::string> zero_position_jointNames;
+
+        std::vector<std::string> zero_speed_jointNames;
+
+        localization_frontend::NamedVectorString mimic_jointNames;
+
+        localization_frontend::NamedVectorString translation_jointNames;
 
         std::vector<std::string> filter_jointNames;
 
@@ -156,16 +164,16 @@ namespace localization_frontend {
         /***********************************/
 
         /** Buffer for raw inputs port samples (the desired filter frequency for proprioceptive inputs) **/
- 	boost::circular_buffer<base::samples::Joints> cbJointsSamples;
-	boost::circular_buffer<base::samples::IMUSensors> cbImuSamples;
-	boost::circular_buffer<base::samples::RigidBodyState> cbOrientationSamples;
-	boost::circular_buffer<base::samples::RigidBodyState> cbReferencePoseSamples;
-	
- 	/** Buffer for filtered Inputs port samples (Store the samples and compute the velocities) **/
-	boost::circular_buffer<base::samples::Joints> jointsSamples; /** Encoder Status information  **/
-	boost::circular_buffer<base::samples::IMUSensors> imuSamples; /** IMU samples **/
-	boost::circular_buffer<base::samples::RigidBodyState> orientationSamples; /** IMU samples **/
-	boost::circular_buffer<base::samples::RigidBodyState> referencePoseSamples; /** Pose information (init and debug)**/
+        boost::circular_buffer<base::samples::Joints> cbJointsSamples;
+        boost::circular_buffer<base::samples::IMUSensors> cbImuSamples;
+        boost::circular_buffer<base::samples::RigidBodyState> cbOrientationSamples;
+        boost::circular_buffer<base::samples::RigidBodyState> cbReferencePoseSamples;
+
+        /** Buffer for filtered Inputs port samples (Store the samples and compute the velocities) **/
+        boost::circular_buffer<base::samples::Joints> jointsSamples; /** Encoder Status information  **/
+        boost::circular_buffer<base::samples::IMUSensors> imuSamples; /** IMU samples **/
+        boost::circular_buffer<base::samples::RigidBodyState> orientationSamples; /** IMU samples **/
+        boost::circular_buffer<base::samples::RigidBodyState> referencePoseSamples; /** Pose information (init and debug)**/
 
         /***************************/
         /** Output port variables **/
