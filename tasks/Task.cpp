@@ -62,12 +62,12 @@ Task::~Task()
 {
 }
 
-void Task::reference_pose_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &reference_pose_samples_sample)
+void Task::pose_reference_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &pose_reference_samples_sample)
 {
-    cbReferencePoseSamples.push_front(reference_pose_samples_sample);
+    cbReferencePoseSamples.push_front(pose_reference_samples_sample);
 
     #ifdef DEBUG_PRINTS
-    std::cout<<"** [EXOTER REFERENCE-POSE]Received Reference Pose Samples at("<<reference_pose_samples_sample.time.toMicroseconds()<<") **\n";
+    std::cout<<"** [EXOTER REFERENCE-POSE]Received Reference Pose Samples at("<<pose_reference_samples_sample.time.toMicroseconds()<<") **\n";
     #endif
 
     if (!initPosition)
@@ -198,7 +198,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
         Eigen::Quaterniond attitude = cbOrientationSamples[0].orientation; //Tworld(osg)_body
 
         /** Check if there is initial pose connected **/
-        if (_reference_pose_samples.connected() && initPosition)
+        if (_pose_reference_samples.connected() && initPosition)
         {
             double heading = 0.00;
 
@@ -225,7 +225,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 
             initAttitude = true;
         }
-        else if (!_reference_pose_samples.connected())
+        else if (!_pose_reference_samples.connected())
         {
             /** Set zero position **/
             world2navigationRbs.position.setZero();
@@ -532,7 +532,7 @@ bool Task::configureHook()
         number.imuSamples = (1.0/_inertial_samples_period.value())/proprioceptive_output_frequency;
         number.jointsSamples = (1.0/_joints_samples_period.value())/proprioceptive_output_frequency;
         number.orientationSamples = (1.0/_orientation_samples_period.value())/proprioceptive_output_frequency;
-        number.referencePoseSamples = std::max((1.0/_reference_pose_samples_period.value())/proprioceptive_output_frequency, 1.0);
+        number.referencePoseSamples = std::max((1.0/_pose_reference_samples_period.value())/proprioceptive_output_frequency, 1.0);
     }
 
     #ifdef DEBUG_PRINTS
@@ -645,7 +645,7 @@ bool Task::configureHook()
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of IMU samples[Hertz]: "<<(1.0/_inertial_samples_period.value())<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of Orientation samples[Hertz]: "<<(1.0/_orientation_samples_period.value())<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of Joints samples[Hertz]: "<<(1.0/_joints_samples_period.value())<<RTT::endlog();
-    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of Reference System [Hertz]: "<<(1.0/_reference_pose_samples_period.value())<<RTT::endlog();
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Frequency of Reference System [Hertz]: "<<(1.0/_pose_reference_samples_period.value())<<RTT::endlog();
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Output Frequency for Proprioceptive Inputs[Hertz]: "<<proprioceptive_output_frequency<<RTT::endlog();
 
     RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] number.jointsSamples: "<<number.jointsSamples<<RTT::endlog();
@@ -1091,9 +1091,10 @@ void Task::outputPortSamples()
     _orientation_samples_out.write(orientationSamples[0]);
 
     /** Ground Truth if available **/
-    if (_reference_pose_samples.connected())
+    if (_pose_reference_samples.connected())
     {
         /** Port Out the info coming from the ground truth **/
+        /** NOTE: All the values (including linear and angular velocities) are wrt the local navigation frame (where localization front-end started) **/
         referenceOut.time = referencePoseSamples[0].time;
         referenceOut.position = referencePoseSamples[0].position;
         referenceOut.cov_position = referencePoseSamples[0].cov_position;
@@ -1103,16 +1104,22 @@ void Task::outputPortSamples()
         referenceOut.cov_velocity = referencePoseSamples[0].cov_velocity;
         referenceOut.angular_velocity = referencePoseSamples[0].angular_velocity;
         referenceOut.cov_angular_velocity = referencePoseSamples[0].cov_angular_velocity;
-        _reference_pose_samples_out.write(referenceOut);
+        _pose_reference_samples_out.write(referenceOut);
 
         /** Delta increments of the ground truth at delta_t given by the output_frequency **/
+        /** NOTE: Linear and Angular velocities are wrt the local robot body frame **/
         delta_referenceOut.time = referencePoseSamples[0].time;
         delta_referenceOut.position = referencePoseSamples[1].orientation.inverse() * (referencePoseSamples[0].position - referencePoseSamples[1].position);//position_k-1_k = (qnavigation_body_k-1)^-1 * (position_navigation_k - position_navigation_k-1)
         Eigen::Affine3d qnavigation_body_k_1(referencePoseSamples[1].orientation);
         delta_referenceOut.cov_position = qnavigation_body_k_1.rotation().transpose() * (referencePoseSamples[0].cov_position - referencePoseSamples[1].cov_position) * qnavigation_body_k_1.rotation();
         delta_referenceOut.orientation = referencePoseSamples[1].orientation.inverse() * referencePoseSamples[0].orientation; //delta quaternion = (T_k-1)^-1 * Tk
         delta_referenceOut.cov_orientation = qnavigation_body_k_1.rotation().transpose() * (referencePoseSamples[0].cov_orientation - referencePoseSamples[1].cov_orientation) * qnavigation_body_k_1.rotation();
-        _reference_delta_pose_samples_out.write(delta_referenceOut);
+        delta_referenceOut.velocity = referencePoseSamples[0].orientation.inverse() * referencePoseSamples[0].velocity;
+        Eigen::Affine3d qnavigation_body_k(referencePoseSamples[0].orientation);
+        delta_referenceOut.cov_velocity = qnavigation_body_k.rotation().transpose() * referencePoseSamples[0].cov_velocity * qnavigation_body_k.rotation();
+        delta_referenceOut.angular_velocity = referencePoseSamples[0].orientation.inverse() * referencePoseSamples[0].angular_velocity;
+        delta_referenceOut.cov_angular_velocity = qnavigation_body_k.rotation().transpose() * referencePoseSamples[0].cov_velocity * qnavigation_body_k.rotation();
+        _delta_pose_reference_samples_out.write(delta_referenceOut);
     }
 
     /** Port-out the estimated world 2 navigation transform **/

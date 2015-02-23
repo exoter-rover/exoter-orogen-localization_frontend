@@ -123,7 +123,7 @@ task_context "Task" do
     	doc 'timestamped laser scans'
 
     #******* External Ground Truth *********
-    input_port("reference_pose_samples", "/base/samples/RigidBodyState").
+    input_port("pose_reference_samples", "/base/samples/RigidBodyState").
         doc "Rover position and orientation information."
 
     ##############################################
@@ -140,7 +140,7 @@ task_context "Task" do
     	align_port("left_frame", 0.5)
     	align_port("right_frame", 0.5)
     	align_port("point_cloud_samples", 0.025)
-    	align_port("reference_pose_samples", 0.01)
+    	align_port("pose_reference_samples", 0.01)
     	max_latency(1.0)
     end
 
@@ -166,10 +166,10 @@ task_context "Task" do
     output_port("right_frame_out", ro_ptr('base::samples::frame::Frame')).
         doc 'Undistorted Right camera frame (after synchronization with the dynamixel).'
 
-    output_port('reference_pose_samples_out', 'base/samples/RigidBodyState').
+    output_port('pose_reference_samples_out', 'base/samples/RigidBodyState').
     	doc 'Pose and velocities computed by the ground truth system.'
 
-    output_port('reference_delta_pose_samples_out', 'base/samples/RigidBodyState').
+    output_port('delta_pose_reference_samples_out', 'base/samples/RigidBodyState').
     	doc 'Delta pose and velocities computed from the ground truth system.'
 
     output_port('world_osg_to_world_out', 'base/samples/RigidBodyState').
