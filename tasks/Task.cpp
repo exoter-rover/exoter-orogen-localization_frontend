@@ -103,7 +103,7 @@ void Task::pose_reference_samplesTransformerCallback(const base::Time &ts, const
     }
     else if (initAttitude)
     {
-        /** Transform the reference pose world_body to navigation_body **/
+        /** Transform the reference pose world_body to navigation_body. Transform the pose transformation. **/
         Eigen::Affine3d Tworld_body = cbReferencePoseSamples[0].getTransform();
         cbReferencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);//Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
 
@@ -1094,12 +1094,14 @@ void Task::outputPortSamples()
     if (_pose_reference_samples.connected())
     {
         /** Port Out the info coming from the ground truth **/
-        /** NOTE: All the values (including linear and angular velocities) are wrt the local navigation frame (where localization front-end started) **/
+        /** NOTE: Position and orientation values are wrt the local navigation frame (where localization front-end started) **/
         referenceOut.time = referencePoseSamples[0].time;
         referenceOut.position = referencePoseSamples[0].position;
         referenceOut.cov_position = referencePoseSamples[0].cov_position;
         referenceOut.orientation = referencePoseSamples[0].orientation;
         referenceOut.cov_orientation = referencePoseSamples[0].cov_orientation;
+
+        /** NOTE: Linear and angular velocities are wrt the local navigation frame (where localization front-end started) **/
         referenceOut.velocity = referencePoseSamples[0].velocity;
         referenceOut.cov_velocity = referencePoseSamples[0].cov_velocity;
         referenceOut.angular_velocity = referencePoseSamples[0].angular_velocity;
