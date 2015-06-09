@@ -1017,7 +1017,7 @@ void Task::calculateVelocities()
             joints[jointIdx].position = 0.00;
         }
 
-        /** Set to Zero position joints **/
+        /** Set to Zero speed joints **/
         std::vector<std::string>::const_iterator zeros = find(zero_speed_jointNames.begin(), zero_speed_jointNames.end(), *it);
         if (zeros != zero_speed_jointNames.end())
         {
