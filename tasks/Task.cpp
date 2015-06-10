@@ -191,7 +191,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 
     /** Transform the orientation world(osg)_imu to world(osg)_body **/
     cbOrientationSamples[0].orientation = orientation_samples_sample.orientation * qtf.inverse(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
-    cbOrientationSamples[0].cov_orientation = orientation_samples_sample.cov_orientation * tf.rotation().inverse(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
+    cbOrientationSamples[0].cov_orientation = tf.rotation() * orientation_samples_sample.cov_orientation * tf.rotation().transpose(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
 
     if(!initAttitude)
     {
@@ -286,7 +286,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 
         /** Transform the orientation world(osg)_body to navigation_body **/
         cbOrientationSamples[0].orientation = qnavigation_world_osg * cbOrientationSamples[0].orientation; // Tnavigation_body = (Tworld(osg)_navigation)^-1 * Tworld(osg)_body
-        cbOrientationSamples[0].cov_orientation = qnavigation_world_osg.toRotationMatrix() * cbOrientationSamples[0].cov_orientation; // Tnavigation_body = (Tworld(osg)_navigation)^-1 * Tworld(osg)_body
+        cbOrientationSamples[0].cov_orientation = qnavigation_world_osg.toRotationMatrix() * cbOrientationSamples[0].cov_orientation * qnavigation_world_osg.toRotationMatrix().transpose(); // Tnavigation_body = (Tworld(osg)_navigation)^-1 * Tworld(osg)_body
     }
 }
 
@@ -857,6 +857,7 @@ void Task::inputPortSamples()
         orientation.orientation.normalize();
 
         orientation.cov_orientation = cov_orientation/cbOrientationSize;
+        //base::guaranteeSPD< Eigen::Matrix<double, 3, 3> > (orientation.cov_orientation);
 
         /** Set the time **/
         orientation.time = (cbOrientationSamples[cbOrientationSize-1].time + cbOrientationSamples[0].time)/2.0;
@@ -900,6 +901,7 @@ void Task::inputPortSamples()
         /** Mean Position **/
         reference_pose.position = position/cbReferencePoseSize;
         reference_pose.cov_position = cov_position/cbReferencePoseSize;
+        //base::guaranteeSPD< Eigen::Matrix<double, 3, 3> > (reference_pose.cov_position);
 
         /** Mean Orientation **/
         w = w/cbReferencePoseSize; y = y/cbReferencePoseSize;
@@ -908,6 +910,7 @@ void Task::inputPortSamples()
         reference_pose.orientation.normalize();
 
         reference_pose.cov_orientation = cov_orientation/cbReferencePoseSize;
+        //base::guaranteeSPD< Eigen::Matrix<double, 3, 3> > (reference_pose.cov_orientation);
 
         /** Set the time **/
         reference_pose.time = (cbReferencePoseSamples[cbReferencePoseSize-1].time + cbReferencePoseSamples[0].time)/2.0;
@@ -1044,8 +1047,8 @@ void Task::calculateVelocities()
 
         if (!::base::samples::RigidBodyState::isValidCovariance(referencePoseSamples[0].cov_velocity))
         {
-            /** Array of zero is the newest sample **/
-            referencePoseSamples[0].cov_velocity = (referencePoseSamples[0].cov_position  - referencePoseSamples[referencePoseSamples.size()-1].cov_position)/((referencePoseSamples.size()-1) * delta_t * delta_t);
+            /** Array of zero is the newest sample. Velocity is the difference in pose but the uncertainty increases **/
+            referencePoseSamples[0].cov_velocity = (referencePoseSamples[0].cov_position  + referencePoseSamples[referencePoseSamples.size()-1].cov_position)/((referencePoseSamples.size()-1) * delta_t * delta_t);
         }
 
         /** Angular Velocities **/
@@ -1058,8 +1061,8 @@ void Task::calculateVelocities()
 
         if (!::base::samples::RigidBodyState::isValidCovariance(referencePoseSamples[0].cov_angular_velocity))
         {
-            /** Array of zero is the newest sample **/
-            referencePoseSamples[0].cov_angular_velocity = (referencePoseSamples[0].cov_orientation  - referencePoseSamples[referencePoseSamples.size()-1].cov_orientation)/((referencePoseSamples.size()-1) * delta_t * delta_t);
+            /** Array of zero is the newest sample. Velocity is the difference in pose but the uncertainty increases **/
+            referencePoseSamples[0].cov_angular_velocity = (referencePoseSamples[0].cov_orientation  + referencePoseSamples[referencePoseSamples.size()-1].cov_orientation)/((referencePoseSamples.size()-1) * delta_t * delta_t);
         }
     }
 
@@ -1110,17 +1113,18 @@ void Task::outputPortSamples()
 
         /** Delta increments of the ground truth at delta_t given by the output_frequency **/
         /** NOTE: Linear and Angular velocities are wrt the local robot body frame **/
+        /** NOTE: Here we use subtraction between covariances because we are interested in the delta covariance. Dangerous, it might be negative variance in case it decreases **/
         delta_referenceOut.time = referencePoseSamples[0].time;
         delta_referenceOut.position = referencePoseSamples[1].orientation.inverse() * (referencePoseSamples[0].position - referencePoseSamples[1].position);//position_k-1_k = (qnavigation_body_k-1)^-1 * (position_navigation_k - position_navigation_k-1)
         Eigen::Affine3d qnavigation_body_k_1(referencePoseSamples[1].orientation);
-        delta_referenceOut.cov_position = qnavigation_body_k_1.rotation().transpose() * (referencePoseSamples[0].cov_position - referencePoseSamples[1].cov_position) * qnavigation_body_k_1.rotation();
+        delta_referenceOut.cov_position = qnavigation_body_k_1.rotation() * (referencePoseSamples[0].cov_position - referencePoseSamples[1].cov_position) * qnavigation_body_k_1.rotation().transpose();
         delta_referenceOut.orientation = referencePoseSamples[1].orientation.inverse() * referencePoseSamples[0].orientation; //delta quaternion = (T_k-1)^-1 * Tk
-        delta_referenceOut.cov_orientation = qnavigation_body_k_1.rotation().transpose() * (referencePoseSamples[0].cov_orientation - referencePoseSamples[1].cov_orientation) * qnavigation_body_k_1.rotation();
+        delta_referenceOut.cov_orientation = qnavigation_body_k_1.rotation() * (referencePoseSamples[0].cov_orientation - referencePoseSamples[1].cov_orientation) * qnavigation_body_k_1.rotation().transpose();
         delta_referenceOut.velocity = referencePoseSamples[0].orientation.inverse() * referencePoseSamples[0].velocity;
         Eigen::Affine3d qnavigation_body_k(referencePoseSamples[0].orientation);
-        delta_referenceOut.cov_velocity = qnavigation_body_k.rotation().transpose() * referencePoseSamples[0].cov_velocity * qnavigation_body_k.rotation();
+        delta_referenceOut.cov_velocity = qnavigation_body_k.rotation() * referencePoseSamples[0].cov_velocity * qnavigation_body_k.rotation().transpose();
         delta_referenceOut.angular_velocity = referencePoseSamples[0].orientation.inverse() * referencePoseSamples[0].angular_velocity;
-        delta_referenceOut.cov_angular_velocity = qnavigation_body_k.rotation().transpose() * referencePoseSamples[0].cov_velocity * qnavigation_body_k.rotation();
+        delta_referenceOut.cov_angular_velocity = qnavigation_body_k.rotation() * referencePoseSamples[0].cov_velocity * qnavigation_body_k.rotation().transpose();
         _delta_pose_reference_samples_out.write(delta_referenceOut);
     }
 
