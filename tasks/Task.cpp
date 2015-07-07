@@ -191,7 +191,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 
     /** Transform the orientation world(osg)_imu to world(osg)_body **/
     cbOrientationSamples[0].orientation = orientation_samples_sample.orientation * qtf.inverse(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
-    cbOrientationSamples[0].cov_orientation = tf.rotation() * orientation_samples_sample.cov_orientation * tf.rotation().transpose(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
+    cbOrientationSamples[0].cov_orientation = tf.inverse().rotation() * orientation_samples_sample.cov_orientation * tf.inverse().rotation().transpose(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
 
     if(!initAttitude)
     {
