@@ -139,12 +139,6 @@ namespace localization_frontend {
 
         std::vector<std::string> filter_jointNames;
 
-        std::vector<std::string> exteroceptive_jointNames;
-
-        base::NamedVector<float> exteroceptive_delta;
-
-        base::NamedVector<float> exteroceptive_distance;
-
         /** FIR filter configuration structure **/
         FilterCoefficients filterConfig;
 

@@ -74,14 +74,17 @@ void Task::pose_reference_samplesTransformerCallback(const base::Time &ts, const
     {
         /** Set pose Tworld_navigation. First time is Tworld_body **/
         world2navigationRbs.position = cbReferencePoseSamples[0].position;
-        world2navigationRbs.orientation = cbReferencePoseSamples[0].orientation;
-	
         world2navigationRbs.velocity.setZero();
 
         /** Assume well known starting position **/
         world2navigationRbs.cov_position = Eigen::Matrix3d::Zero();
         world2navigationRbs.cov_velocity = Eigen::Matrix3d::Zero();
+    }
 
+    if (!initAttitude)
+    {
+        world2navigationRbs.orientation = cbReferencePoseSamples[0].orientation;
+	
         #ifdef DEBUG_PRINTS
         Eigen::Matrix <double,3,1> euler; /** In Euler angles **/
         euler[2] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];//Yaw
@@ -347,9 +350,6 @@ void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base:
             /** Out port the information of the proprioceptive sensors **/
             this->outputPortSamples ();
 
-            /** Distance information for the exteroceptive sensors  **/
-            this->distanceForExteroceptive ();
-
             /** Reset back the counters and the flags **/
             counter.reset();
             flag.reset();
@@ -375,26 +375,16 @@ void Task::left_frameTransformerCallback(const base::Time &ts, const ::RTT::extr
     if (state() == RUNNING)
     {
 
-        #ifdef DEBUG_PRINTS
-        std::cout<<"[EXOTER LEFT-CAMERA] delta distance is "<< exteroceptive_delta[_left_frame.getName()]<<" desired distance is "<< exteroceptive_distance[_left_frame.getName()] <<"\n";
-        #endif
+        /** Undistorted image depending on meta data information **/
+        ::base::samples::frame::Frame *frame_ptr = leftFrame.write_access();
+        frame_ptr->time = left_frame_sample->time;
+        frame_ptr->init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), left_frame_sample->getFrameMode());
+        frameHelperLeft.convert(*left_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
+        leftFrame.reset(frame_ptr);
 
-        /** In case we theoretically moved the desired distance **/
-        if (exteroceptive_delta[_left_frame.getName()] >= exteroceptive_distance[_left_frame.getName()])
-        {
-            /** Undistorted image depending on meta data information **/
-            ::base::samples::frame::Frame *frame_ptr = leftFrame.write_access();
-            frame_ptr->time = left_frame_sample->time;
-            frame_ptr->init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), left_frame_sample->getFrameMode());
-            frameHelperLeft.convert(*left_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
-            leftFrame.reset(frame_ptr);
+        /** Write the camera frame into the port **/
+        _left_frame_out.write(leftFrame);
 
-            /** Write the camera frame into the port **/
-            _left_frame_out.write(leftFrame);
-
-            /** Reset the delta **/
-            exteroceptive_delta[_left_frame.getName()] = 0.00;
-        }
     }
 
     return;
@@ -408,22 +398,15 @@ void Task::right_frameTransformerCallback(const base::Time &ts, const ::RTT::ext
 
     if (state() == RUNNING)
     {
-        /** In case we theoretically moved the desired distance **/
-        if (exteroceptive_delta[_right_frame.getName()] >= exteroceptive_distance[_right_frame.getName()])
-        {
-            /** Undistorted image depending on meta data information **/
-            ::base::samples::frame::Frame *frame_ptr = rightFrame.write_access();
-            frame_ptr->time = right_frame_sample->time;
-            frame_ptr->init(right_frame_sample->size.width, right_frame_sample->size.height, right_frame_sample->getDataDepth(), right_frame_sample->getFrameMode());
-            frameHelperRight.convert(*right_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
-            rightFrame.reset(frame_ptr);
+        /** Undistorted image depending on meta data information **/
+        ::base::samples::frame::Frame *frame_ptr = rightFrame.write_access();
+        frame_ptr->time = right_frame_sample->time;
+        frame_ptr->init(right_frame_sample->size.width, right_frame_sample->size.height, right_frame_sample->getDataDepth(), right_frame_sample->getFrameMode());
+        frameHelperRight.convert(*right_frame_sample, *frame_ptr, 0, 0, frame_helper::INTER_LINEAR, true);
+        rightFrame.reset(frame_ptr);
 
-            /** Write the camera frame into the port **/
-            _right_frame_out.write(rightFrame);
-
-            /** Reset the delta **/
-            exteroceptive_delta[_right_frame.getName()] = 0.00;
-        }
+        /** Write the camera frame into the port **/
+        _right_frame_out.write(rightFrame);
     }
 
     return;
@@ -443,29 +426,22 @@ void Task::point_cloud_samplesTransformerCallback(const base::Time &ts, const ::
 
     if (state() == RUNNING)
     {
-        /** In case we theoretically moved the desired distance **/
-        if (exteroceptive_delta[_point_cloud_samples.getName()] >= exteroceptive_distance[_point_cloud_samples.getName()])
+        base::samples::Pointcloud pointcloud;
+
+        /** Transform the point cloud in body frame **/
+        pointcloud.time = point_cloud_samples_sample.time;
+        pointcloud.points.resize(point_cloud_samples_sample.points.size());
+        pointcloud.colors = point_cloud_samples_sample.colors;
+        register int k = 0;
+        for (std::vector<base::Point>::const_iterator it = point_cloud_samples_sample.points.begin();
+            it != point_cloud_samples_sample.points.end(); it++)
         {
-            base::samples::Pointcloud pointcloud;
-
-            /** Transform the point cloud in body frame **/
-            pointcloud.time = point_cloud_samples_sample.time;
-            pointcloud.points.resize(point_cloud_samples_sample.points.size());
-            pointcloud.colors = point_cloud_samples_sample.colors;
-            register int k = 0;
-            for (std::vector<base::Point>::const_iterator it = point_cloud_samples_sample.points.begin();
-                it != point_cloud_samples_sample.points.end(); it++)
-            {
-                pointcloud.points[k] = tf * (*it);
-                k++;
-            }
-
-            /** Write the point cloud into the port **/
-            _point_cloud_samples_out.write(pointcloud);
-
-            /** Reset the delta **/
-            exteroceptive_delta[_point_cloud_samples.getName()] = 0.00;
+            pointcloud.points[k] = tf * (*it);
+            k++;
         }
+
+        /** Write the point cloud into the port **/
+        _point_cloud_samples_out.write(pointcloud);
     }
 
     return;
@@ -614,23 +590,6 @@ bool Task::configureHook()
     /** Exteroceptive Sensor **/
     /**************************/
 
-    /** Rover joints to use for the distance calculation **/
-    exteroceptive_jointNames = _exteroceptive_jointNames.value();
-
-    /** The delta distance and desired distance to compute **/
-    exteroceptive_delta.resize(_exteroceptive_output_name.get().size());
-    exteroceptive_delta.names = _exteroceptive_output_name.value();
-
-    exteroceptive_distance.resize(_exteroceptive_output_name.get().size());
-    exteroceptive_distance.names = _exteroceptive_output_name.value();
-
-    int idx = 0.00;
-    for(std::vector<std::string>::const_iterator it_name = exteroceptive_delta.names.begin(); it_name != exteroceptive_delta.names.end(); it_name++)
-    {
-        exteroceptive_delta[*it_name] = 0.00;
-        exteroceptive_distance[*it_name] = _exteroceptive_output_distance.get()[idx];
-        idx++;
-    }
 
     /*********************/
     /** Low-Pass Filter **/
@@ -1148,35 +1107,6 @@ void Task::outputPortSamples()
     {
         _angular_position.write(jointsSamplesOut[13].position);
         _angular_rate.write(jointsSamplesOut[13].speed); //!Front Left
-    }
-
-    return;
-}
-
-
-void Task::distanceForExteroceptive()
-{
-
-    double delta_t = (1.0/proprioceptive_output_frequency);
-    double avg_joints_speed= 0.00;
-
-    /** Loop for the selected joints to compute the wheel movements **/
-    for(std::vector<std::string>::const_iterator it = exteroceptive_jointNames.begin();
-        it != exteroceptive_jointNames.end(); it++)
-    {
-        avg_joints_speed += jointsSamplesOut[*it].speed;
-    }
-
-    avg_joints_speed = avg_joints_speed / static_cast<float>(exteroceptive_jointNames.size());
-
-    //std::cout<<"avg_joints_speed: "<< avg_joints_speed <<"\n";
-
-    /** Loop for the different exteroceptive sensors in the task **/
-    for(std::vector<std::string>::const_iterator it = exteroceptive_delta.names.begin();
-        it != exteroceptive_delta.names.end(); it++)
-    {
-        //std::cout<<"increments in distance: "<< (avg_joints_speed * _wheelRadius.value()) * delta_t<<"\n";
-        exteroceptive_delta[*it] += (avg_joints_speed * _wheelRadius.value()) * delta_t;
     }
 
     return;

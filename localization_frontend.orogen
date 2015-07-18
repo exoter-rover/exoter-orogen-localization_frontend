@@ -26,25 +26,25 @@ task_context "Task" do
     property('proprioceptive_output_frequency', 'double').
         doc 'Output frequency of the proprioceptive sensors samples (joints, inertial sensors and orientation).'
 
-    property('orientation_source_frame', '/std/string').doc 'From Frame for the transformer'
+    property('orientation_source_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('orientation_target_frame', '/std/string').doc 'To Frame for the transformer'
+    property('orientation_target_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('navigation_source_frame', '/std/string').doc 'From Frame for the transformer'
+    property('navigation_source_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('navigation_target_frame', '/std/string').doc 'To Frame for the transformer'
+    property('navigation_target_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('reference_source_frame', '/std/string').doc 'From Frame for the transformer'
+    property('reference_source_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('reference_target_frame', '/std/string').doc 'To Frame for the transformer'
+    property('reference_target_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('delta_reference_source_frame', '/std/string').doc 'From Frame for the transformer'
+    property('delta_reference_source_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('delta_reference_target_frame', '/std/string').doc 'To Frame for the transformer'
+    property('delta_reference_target_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('world_source_frame', '/std/string').doc 'From Frame for the transformer'
+    property('world_source_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('world_target_frame', '/std/string').doc 'To Frame for the transformer'
+    property('world_target_frame', '/std/string').doc 'Frame for the transformer'
 
     property('odometry_jointNames', 'std/vector<std/string>').
 	    doc 'Locomotion joints searching by names.'
@@ -61,20 +61,12 @@ task_context "Task" do
     property('translation_jointNames', 'localization_frontend::NamedVectorString').
     	doc 'Joints which use other joints to convert angular rotation to translational displacement (position and speed). Empty by default'
 
+    property('wheelRadius', 'double').
+    	doc 'Effective wheel radius average for odometry'
+
     #**********************************
     #**** Exteroceptive Properties ****
     #**********************************
-    property('exteroceptive_output_name', 'std/vector<std/string>').
-	    doc 'Exteroceptive sensor names as input ports in the task.'
-
-    property('exteroceptive_output_distance',  'std/vector<double>').
-        doc 'Output estimated distance in meters between exteroceptive sensors samples (laser scans, camera images).'
-
-    property('exteroceptive_jointNames', 'std/vector<std/string>').
-    	doc 'Locomotion joints searching by names in order to compute relative movement.'
-
-    property('wheelRadius', 'double').
-    	doc 'Effective wheel radius average for odometry'
 
     #******************************
     #*** IIR Filter Properties ****
