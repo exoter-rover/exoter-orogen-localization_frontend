@@ -120,7 +120,7 @@ void Task::pose_reference_samplesTransformerCallback(const base::Time &ts, const
 
         #ifdef DEBUG_PRINTS
         Eigen::Matrix <double,3,1> euler = base::getEuler(cbReferencePoseSamples[0].orientation); /** In Euler angles **/
-        std::cout<<"** [EXOTER REFERENCE-_POSE] CURRENT **\n";
+        std::cout<<"** [EXOTER REFERENCE_POSE] CURRENT **\n";
         std::cout<<"** position(world_frame)\n"<< cbReferencePoseSamples[0].position<<"\n";
         std::cout<<"** Roll: "<<euler[2]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[0]*R2D<<"\n";
         #endif
@@ -851,6 +851,7 @@ void Task::inputPortSamples()
         orientation.orientation.normalize();
 
         orientation.cov_orientation = cov_orientation/cbOrientationSize;
+        orientation.cov_orientation(2,2) = orientation.cov_orientation(2,2)/_attitude_covariance_adjustment.value(); // fixed error in the covariance computation coming from imu filter
         //base::guaranteeSPD< Eigen::Matrix<double, 3, 3> > (orientation.cov_orientation);
 
         /** Set the time **/

@@ -64,6 +64,9 @@ task_context "Task" do
     property('wheelRadius', 'double').
     	doc 'Effective wheel radius average for odometry'
 
+    property('attitude_covariance_adjustment', 'double').
+        doc 'Value to fix some imu  log test that did not estimate the uncertainty correctly.'
+
     #**********************************
     #**** Exteroceptive Properties ****
     #**********************************
