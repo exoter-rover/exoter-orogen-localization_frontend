@@ -70,6 +70,14 @@ void Task::pose_reference_samplesTransformerCallback(const base::Time &ts, const
     std::cout<<"** [EXOTER REFERENCE-POSE]Received Reference Pose Samples at("<<pose_reference_samples_sample.time.toMicroseconds()<<") **\n";
     #endif
 
+    #ifdef DEBUG_PRINTS
+    Eigen::Vector3d euler = base::getEuler(cbReferencePoseSamples[0].orientation);
+    std::cout<< "******** [EXOTER REFERENCE_POSE]\n";
+    std::cout<< "******** RECEIVED ATTITUDE *******"<<"\n";
+    std::cout<< "Roll: "<<euler[2]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[0]*R2D<<"\n";
+    #endif
+
+
     if (!initPosition)
     {
         /** Set pose Tworld_navigation. First time is Tworld_body **/
@@ -86,13 +94,10 @@ void Task::pose_reference_samplesTransformerCallback(const base::Time &ts, const
         world2navigationRbs.orientation = cbReferencePoseSamples[0].orientation;
 	
         #ifdef DEBUG_PRINTS
-        Eigen::Matrix <double,3,1> euler; /** In Euler angles **/
-        euler[2] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];//Yaw
-        euler[1] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[1];//Pitch
-        euler[0] = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[2];//Roll
-        std::cout<<"** [EXOTER REFERENCE-POSE]cbReferencePoseSamples at ("<<cbReferencePoseSamples[0].time.toMicroseconds()<< ")**\n";
+        Eigen::Matrix <double,3,1> euler = base::getEuler(cbReferencePoseSamples[0].orientation); /** In Euler angles **/
+        std::cout<<"** [EXOTER REFERENCE_POSE]cbReferencePoseSamples at ("<<cbReferencePoseSamples[0].time.toMicroseconds()<< ")**\n";
         std::cout<<"** position(world_frame)\n"<< cbReferencePoseSamples[0].position<<"\n";
-        std::cout<<"** Roll: "<<euler[0]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[2]*R2D<<"\n";
+        std::cout<<"** Roll: "<<euler[2]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[0]*R2D<<"\n";
         #endif
 
         /** Initial angular velocity **/
@@ -109,8 +114,17 @@ void Task::pose_reference_samplesTransformerCallback(const base::Time &ts, const
         /** Transform the reference pose world_body to navigation_body. Transform the pose transformation. **/
         Eigen::Affine3d Tworld_body = cbReferencePoseSamples[0].getTransform();
         cbReferencePoseSamples[0].setTransform(world2navigationRbs.getTransform().inverse() * Tworld_body);//Tnavigation_body = (Tworld_navigation)^-1 * Tworld_body
+        cbReferencePoseSamples[0].orientation.normalize();
 
         /** At this point reference pose does not have info regarding linear or angular velocity **/
+
+        #ifdef DEBUG_PRINTS
+        Eigen::Matrix <double,3,1> euler = base::getEuler(cbReferencePoseSamples[0].orientation); /** In Euler angles **/
+        std::cout<<"** [EXOTER REFERENCE-_POSE] CURRENT **\n";
+        std::cout<<"** position(world_frame)\n"<< cbReferencePoseSamples[0].position<<"\n";
+        std::cout<<"** Roll: "<<euler[2]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[0]*R2D<<"\n";
+        #endif
+
     }
 
    flag.referencePoseSamples = true;
@@ -192,9 +206,25 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
     /** Push one sample into the buffer **/
     cbOrientationSamples.push_front(orientation_samples_sample);
 
+    #ifdef DEBUG_PRINTS
+    Eigen::Vector3d euler = base::getEuler(cbOrientationSamples[0].orientation);
+    std::cout<< "******** [EXOTER ORIENTATION_SAMPLES]\n";
+    std::cout<< "******** RECEIVED ATTITUDE *******"<<"\n";
+    std::cout<< "Roll: "<<euler[2]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[0]*R2D<<"\n";
+    #endif
+
+
     /** Transform the orientation world(osg)_imu to world(osg)_body **/
     cbOrientationSamples[0].orientation = orientation_samples_sample.orientation * qtf.inverse(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
     cbOrientationSamples[0].cov_orientation = tf.inverse().rotation() * orientation_samples_sample.cov_orientation * tf.inverse().rotation().transpose(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
+
+    #ifdef DEBUG_PRINTS
+    euler = base::getEuler(cbOrientationSamples[0].orientation);
+    std::cout<< "******** [EXOTER ORIENTATION_SAMPLES]\n";
+    std::cout<< "******** RECEIVED ATTITUDE IN BODY*******"<<"\n";
+    std::cout<< "Roll: "<<euler[2]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[0]*R2D<<"\n";
+    #endif
+
 
     if(!initAttitude)
     {
@@ -208,7 +238,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             /** Check if the reference pose has a valid orientation **/
             if(base::samples::RigidBodyState::isValidValue(cbReferencePoseSamples[0].orientation))
             {
-                heading = cbReferencePoseSamples[0].orientation.toRotationMatrix().eulerAngles(2,1,0)[0];
+                heading = base::getEuler(cbReferencePoseSamples[0].orientation)[0];// vector[0] is z-axis
             }
             else
             {
@@ -218,8 +248,8 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             /** Align the Yaw from the Reference Pose Samples, Pitch and Roll from orientationSamples **/
             attitude = Eigen::Quaternion <double>(
                     Eigen::AngleAxisd(heading, Eigen::Vector3d::UnitZ())*
-                    Eigen::AngleAxisd(attitude.toRotationMatrix().eulerAngles(2,1,0)[1], Eigen::Vector3d::UnitY()) *
-                    Eigen::AngleAxisd(attitude.toRotationMatrix().eulerAngles(2,1,0)[2], Eigen::Vector3d::UnitX()));
+                    Eigen::AngleAxisd(base::getEuler(attitude)[1], Eigen::Vector3d::UnitY()) *
+                    Eigen::AngleAxisd(base::getEuler(attitude)[2], Eigen::Vector3d::UnitX()));
 
             attitude.normalize(); //Tworld_body
 
@@ -265,13 +295,10 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
             world_osg2worldRbs.cov_angular_velocity = Eigen::Matrix <double, 3 , 3>::Zero();
 
             #ifdef DEBUG_PRINTS
-            Eigen::Vector3d euler;
-            euler[2] = attitude.toRotationMatrix().eulerAngles(2,1,0)[0];//YAW
-            euler[1] = attitude.toRotationMatrix().eulerAngles(2,1,0)[1];//PITCH
-            euler[0] = attitude.toRotationMatrix().eulerAngles(2,1,0)[2];//ROLL
+            Eigen::Vector3d euler = base::getEuler(attitude);
             std::cout<< "******** [EXOTER ORIENTATION_SAMPLES]\n";
             std::cout<< "******** Initial Attitude *******"<<"\n";
-            std::cout<< "Roll: "<<euler[0]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[2]*R2D<<"\n";
+            std::cout<< "Roll: "<<euler[2]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[0]*R2D<<"\n";
             #endif
 
 
@@ -285,11 +312,19 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
     else
     {
         /** We want the orientation with respect to the fixed local frame Navigation frame **/
-        Eigen::Quaterniond qnavigation_world_osg(world2navigationRbs.orientation.inverse() * world_osg2worldRbs.orientation.inverse());//Tnavigation_world(osg) = (Tworld*navigation)^-1 * (Tworld(osg)_world)^-1
+        Eigen::Quaterniond qnavigation_world_osg(world2navigationRbs.orientation.inverse() * world_osg2worldRbs.orientation.inverse());//Tnavigation_world(osg) = (Tworld_navigation)^-1 * (Tworld(osg)_world)^-1
 
         /** Transform the orientation world(osg)_body to navigation_body **/
         cbOrientationSamples[0].orientation = qnavigation_world_osg * cbOrientationSamples[0].orientation; // Tnavigation_body = (Tworld(osg)_navigation)^-1 * Tworld(osg)_body
+        cbOrientationSamples[0].orientation.normalize();
         cbOrientationSamples[0].cov_orientation = qnavigation_world_osg.toRotationMatrix() * cbOrientationSamples[0].cov_orientation * qnavigation_world_osg.toRotationMatrix().transpose(); // Tnavigation_body = (Tworld(osg)_navigation)^-1 * Tworld(osg)_body
+
+        #ifdef DEBUG_PRINTS
+        Eigen::Vector3d euler = base::getEuler(cbOrientationSamples[0].orientation);
+        std::cout<< "******** [EXOTER ORIENTATION_SAMPLES]\n";
+        std::cout<< "******** Current Attitude *******"<<"\n";
+        std::cout<< "Roll: "<<euler[2]*R2D<<" Pitch: "<<euler[1]*R2D<<" Yaw: "<<euler[0]*R2D<<"\n";
+        #endif
     }
 }
 
