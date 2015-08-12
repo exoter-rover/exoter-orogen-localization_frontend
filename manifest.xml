@@ -21,5 +21,8 @@
   <depend package="drivers/orogen/transformer" />
   <depend package="image_processing/frame_helper"/>
   <depend package="slam/localization"/>
+  <depend package="exoter/exoter_dynamics"/>
+  <depend package="control/urdfdom" />
+  <depend package="slam/threed_odometry" />
   <tags>stable, localization</tags>
 </package>

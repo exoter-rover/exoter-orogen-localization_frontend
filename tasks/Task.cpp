@@ -331,12 +331,12 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
 void Task::joints_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample)
 {
     base::samples::Joints joints;
-    joints.resize(odometry_jointNames.size());
+    joints.resize(all_joint_names.size());
     joints.time = joints_samples_sample.time;
-    joints.names = odometry_jointNames;
+    joints.names = all_joint_names;
 
     /** A new sample arrived to the Input port **/
-    for(std::vector<std::string>::const_iterator it = odometry_jointNames.begin(); it != odometry_jointNames.end(); it++)
+    for(std::vector<std::string>::const_iterator it = all_joint_names.begin(); it != all_joint_names.end(); it++)
     {
         try
         {
@@ -495,13 +495,13 @@ bool Task::configureHook()
     /** Read configuration **/
     /************************/
     proprioceptive_output_frequency = _proprioceptive_output_frequency.value();
-    odometry_jointNames = _odometry_jointNames.value();
-    zero_position_jointNames = _zero_position_jointNames.value();
-    zero_speed_jointNames = _zero_speed_jointNames.value();
-    mimic_jointNames = _mimic_jointNames.value();
-    translation_jointNames = _translation_jointNames.value();
+    all_joint_names = _all_joint_names.value();
+    zero_position_joint_names = _zero_position_joint_names.value();
+    zero_speed_joint_names = _zero_speed_joint_names.value();
+    mimic_joint_names = _mimic_joint_names.value();
+    translation_joint_names = _translation_joint_names.value();
     filterConfig = _filter_config.value();
-    filter_jointNames = _filter_jointNames.value();
+    filter_joint_names = _filter_joint_names.value();
 
     /*******************************************/
     /** Initial world to navigation transform **/
@@ -568,14 +568,14 @@ bool Task::configureHook()
 
     for(register unsigned int i=0; i<cbJointsSamples.size(); ++i)
     {
-    	cbJointsSamples[i].resize(odometry_jointNames.size());
+    	cbJointsSamples[i].resize(all_joint_names.size());
     }
 
     /** Initialize the samples for the filtered buffer joint values **/
     for(register unsigned int i=0; i<jointsSamples.size(); i++)
     {
     	/** Sizing the joints **/
-	    jointsSamples[i].resize(odometry_jointNames.size());
+	    jointsSamples[i].resize(all_joint_names.size());
     }
 
     /** Initialize the samples for the filtered buffer imuSamples values **/
@@ -604,8 +604,8 @@ bool Task::configureHook()
     #endif
 
     /** Output Joints state vector **/
-    jointsSamplesOut.resize(odometry_jointNames.size());
-    jointsSamplesOut.names = odometry_jointNames;
+    jointsSamplesOut.resize(all_joint_names.size());
+    jointsSamplesOut.names = all_joint_names;
 
 
     /** Output images **/
@@ -625,6 +625,62 @@ bool Task::configureHook()
     /** Exteroceptive Sensor **/
     /**************************/
 
+    /**************************/
+    /***** Read URDF file *****/
+    /**************************/
+    std::string urdf_file = _urdf_file.value();
+    std::string xml_string;
+    const char * urdf_char = urdf_file.c_str();
+    std::fstream xml_file(urdf_char, std::fstream::in);
+    while ( xml_file.good() )
+    {
+        std::string line;
+        std::getline( xml_file, line);
+        xml_string += (line + "\n");
+    }
+    xml_file.close();
+
+    boost::shared_ptr<urdf::ModelInterface> robot = urdf::parseURDF(xml_string);
+    if (!robot)
+    {
+        throw std::runtime_error("[Localization Front-End] [Info] Configuration could not parse URDF model\n");
+    }
+
+    /******************/
+    /** Wheel Radius **/
+    /******************/
+    Eigen::Vector3d wheel_radius_offset;
+    if (this->searchURDFJointNames(robot->getRoot(), _wheel_radius_joint_names.value()[0], wheel_radius_offset))
+    {
+        /** Minus sign because it is in z-axis negative direction with respect to body in URDF **/
+        this->wheel_radius = -wheel_radius_offset[2];
+        RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Wheel radius [meter]: "<<this->wheel_radius<<RTT::endlog();
+    }
+    else
+    {
+        throw std::runtime_error("[Localization Front-End] [Info] Unable to find Wheel radius joint names in given URDF\n");
+    }
+
+    /*********************/
+    /** Reaction Forces **/
+    /*********************/
+    Eigen::Vector3d passive_joint_offset;
+    passive_joint_offset.setZero();
+    if (this->searchURDFJointNames(robot->getRoot(), _passive_offset_joint_name.value(), passive_joint_offset))
+    {
+        passive_joint_offset[1] = passive_joint_offset[2] = 0.00;
+    }
+
+    this->exoter_rf.passive_joint_offset = passive_joint_offset;
+    RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Passive joint offset for the Reaction forces computation:\n"<<this->exoter_rf.passive_joint_offset<<RTT::endlog();
+
+    /****************************/
+    /** Robot Kinematics Model **/
+    /****************************/
+    this->number_robot_joints =  _all_joint_names.value().size() - _slip_joint_names.value().size() - _contact_joint_names.value().size();
+    this->robot_kinematics.reset(new threed_odometry::KinematicKDL (urdf_file, _contact_point_segments.value(),
+                            _contact_angle_segments.value(), this->number_robot_joints,
+                            _slip_joint_names.value().size(), _contact_joint_names.value().size()));
 
     /*********************/
     /** Low-Pass Filter **/
@@ -652,7 +708,7 @@ bool Task::configureHook()
     else
         RTT::log(RTT::Warning)<<"[Localization Front-End] [Info] Low-Pass Filter [OFF]"<<RTT::endlog();
 
-    if (filter_jointNames.size() != FILTER_VECTOR_SIZE)
+    if (filter_joint_names.size() != FILTER_VECTOR_SIZE)
     {
         RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] The number of joints to perform the filter has to be "<<FILTER_VECTOR_SIZE<<RTT::endlog();
         RTT::log(RTT::Warning)<<"[Localization Front-End] [FATAL ERROR] Otherwise change the FILTER_VECTOR_SIZE constant in the code."<<RTT::endlog();
@@ -660,10 +716,10 @@ bool Task::configureHook()
         return false;
     }
 
-    for(std::vector<std::string>::const_iterator it_name = filter_jointNames.begin(); it_name != filter_jointNames.end(); it_name++)
+    for(std::vector<std::string>::const_iterator it_name = filter_joint_names.begin(); it_name != filter_joint_names.end(); it_name++)
     {
-        std::vector<std::string>::const_iterator it = find(odometry_jointNames.begin(), odometry_jointNames.end(), *it_name);
-        if (it == odometry_jointNames.end())
+        std::vector<std::string>::const_iterator it = find(all_joint_names.begin(), all_joint_names.end(), *it_name);
+        if (it == all_joint_names.end())
             throw std::runtime_error("[Localization Front-End] [FATAL ERROR]: Joints names for filter must be contained in all joints names property.");
     }
 
@@ -727,7 +783,7 @@ void Task::inputPortSamples()
     base::samples::RigidBodyState reference_pose;
 
     /** Sizing the joints **/
-    joint.resize(odometry_jointNames.size());
+    joint.resize(all_joint_names.size());
 
     #ifdef DEBUG_PRINTS
     std::cout<<"[GetInportValue] cbJointsSamples has capacity "<<cbJointsSamples.capacity()<<" and size "<<cbJointsSamples.size()<<"\n";
@@ -779,7 +835,7 @@ void Task::inputPortSamples()
             /** Get the joints to filter **/
             register int idx = 0;
             Eigen::Matrix<double, FILTER_VECTOR_SIZE, 1> filter_jointVector;
-            for(std::vector<std::string>::const_iterator it = filter_jointNames.begin(); it != filter_jointNames.end(); it++)
+            for(std::vector<std::string>::const_iterator it = filter_joint_names.begin(); it != filter_joint_names.end(); it++)
             {
                 filter_jointVector[idx] = joint.getElementByName(*it).position;
                 idx++;
@@ -790,7 +846,7 @@ void Task::inputPortSamples()
 
             /** Set the filtered joints **/
             idx = 0;
-            for(std::vector<std::string>::const_iterator it = filter_jointNames.begin(); it != filter_jointNames.end(); it++)
+            for(std::vector<std::string>::const_iterator it = filter_joint_names.begin(); it != filter_joint_names.end(); it++)
             {
                 joint[*it].position = filter_jointVector[idx];
                 idx++;
@@ -801,9 +857,9 @@ void Task::inputPortSamples()
         /**  MIMIC JOINTS   **/
         /** *************** **/
         register int idx = 0;
-        for(std::vector<std::string>::const_iterator it = mimic_jointNames.names.begin(); it != mimic_jointNames.names.end(); it++)
+        for(std::vector<std::string>::const_iterator it = mimic_joint_names.names.begin(); it != mimic_joint_names.names.end(); it++)
         {
-            joint[*it].position = -joint.getElementByName(mimic_jointNames.elements[idx]).position;
+            joint[*it].position = -joint.getElementByName(mimic_joint_names.elements[idx]).position;
             idx++;
         }
 
@@ -811,10 +867,10 @@ void Task::inputPortSamples()
         /**  TRANSLATION JOINTS   **/
         /** ********************* **/
         idx = 0;
-        for(std::vector<std::string>::const_iterator it = translation_jointNames.names.begin(); it != translation_jointNames.names.end(); it++)
+        for(std::vector<std::string>::const_iterator it = translation_joint_names.names.begin(); it != translation_joint_names.names.end(); it++)
         {
-            joint[*it].position = _wheelRadius.value() * joint.getElementByName(translation_jointNames.elements[idx]).position;
-            joint[*it].speed = _wheelRadius.value() * joint.getElementByName(translation_jointNames.elements[idx]).speed;
+            joint[*it].position = this->wheel_radius * joint.getElementByName(translation_joint_names.elements[idx]).position;
+            joint[*it].speed = this->wheel_radius * joint.getElementByName(translation_joint_names.elements[idx]).speed;
             idx++;
         }
 
@@ -1009,15 +1065,15 @@ void Task::calculateVelocities()
         #endif
 
         /** Set to Zero position joints **/
-        std::vector<std::string>::const_iterator zerop = find(zero_position_jointNames.begin(), zero_position_jointNames.end(), *it);
-        if (zerop != zero_position_jointNames.end())
+        std::vector<std::string>::const_iterator zerop = find(zero_position_joint_names.begin(), zero_position_joint_names.end(), *it);
+        if (zerop != zero_position_joint_names.end())
         {
             joints[jointIdx].position = 0.00;
         }
 
         /** Set to Zero speed joints **/
-        std::vector<std::string>::const_iterator zeros = find(zero_speed_jointNames.begin(), zero_speed_jointNames.end(), *it);
-        if (zeros != zero_speed_jointNames.end())
+        std::vector<std::string>::const_iterator zeros = find(zero_speed_joint_names.begin(), zero_speed_joint_names.end(), *it);
+        if (zeros != zero_speed_joint_names.end())
         {
             joints[jointIdx].speed = 0.00;
         }
@@ -1064,6 +1120,91 @@ void Task::calculateVelocities()
     return;
 }
 
+bool Task::searchURDFJointNames(boost::shared_ptr<const urdf::Link> link, const std::string &name_to_search,
+                                Eigen::Vector3d &translation)
+{
+    double r, p, y;
+    for (std::vector<boost::shared_ptr<urdf::Link> >::const_iterator child =
+            link->child_links.begin(); child != link->child_links.end();
+            ++child)
+    {
+        (*child)->parent_joint->parent_to_joint_origin_transform.rotation.getRPY(r,p,y);
+
+        //std::cout<<"segment name: "<<link->name<<"\n";
+        //std::cout<<"joint name: "<<(*child)->parent_joint->name<<"\n";
+        if (link->name.compare(name_to_search) == 0)
+        {
+            translation[0] = (*child)->parent_joint->parent_to_joint_origin_transform.position.x;
+            translation[1] = (*child)->parent_joint->parent_to_joint_origin_transform.position.y;
+            translation[2] = (*child)->parent_joint->parent_to_joint_origin_transform.position.z;
+
+            //std::cout<<"FOUND\n"<<translation<<"\n";
+            return true;
+        }
+
+        if(searchURDFJointNames(*child, name_to_search, translation))
+            return true;
+    }
+
+    return false;
+}
+
+void Task::joints_samplesUnpack(const ::base::samples::Joints &original_joints,
+                                const std::vector<std::string> &order_names,
+                                std::vector<double> &joint_positions)
+{
+    for(std::vector<std::string>::const_iterator it = order_names.begin(); it != order_names.end(); it++)
+    {
+        base::JointState const &state(original_joints[*it]);
+
+        /** Avoid NaN values in position **/
+        if (std::isfinite(state.position))
+            joint_positions.push_back(state.position);
+        else
+            joint_positions.push_back(0.00);
+
+    }
+    return;
+}
+
+void Task::computeWeightingMatrix(const ::base::samples::Joints &robot_joints,
+                                const Eigen::Quaterniond &orientation,
+                                base::MatrixXd &matrix)
+{
+    std::vector< Eigen::Matrix<double, 3, 1>,
+        Eigen::aligned_allocator < Eigen::Matrix<double, 3, 1> > > wheel_positions;
+    matrix.resize(::exoter_dynamics::NUMBER_OF_WHEELS*::exoter_dynamics::NUMBER_OF_WHEELS,
+                    ::exoter_dynamics::NUMBER_OF_WHEELS*::exoter_dynamics::NUMBER_OF_WHEELS);
+
+    /** Get joints position and velocity ordered by Motion Model joint names **/
+    std::vector<double> joint_positions;
+    this->joints_samplesUnpack(robot_joints, _all_joint_names.value(), joint_positions);
+
+    /** Forward Kinematics in order to set Contact Points positions **/
+    std::vector<Eigen::Affine3d> transformations;
+    std::vector<base::Matrix6d> covariances;
+    this->robot_kinematics->fkSolver(joint_positions, _contact_point_segments.value(), transformations, covariances);
+
+    /** Store the translation part of the wheel position/contact points **/
+    std::vector<Eigen::Affine3d>::const_iterator it_trans = transformations.begin();
+    std::vector< Eigen::Matrix<double, 3, 1>,
+        Eigen::aligned_allocator < Eigen::Matrix<double, 3, 1> > >::iterator it_wheel = wheel_positions.begin();
+
+    for (; it_trans != transformations.end(); ++it_trans, ++it_wheel)
+    {
+       *it_wheel = (*it_trans).translation();
+    }
+
+    /** Compute the reaction forces **/
+    Eigen::Matrix<double, ::exoter_dynamics::NUMBER_OF_WHEELS, 1> forces;
+    this->exoter_rf.forceAnalysis(base::Vector3d::Zero(), wheel_positions, orientation, 1.0, forces);
+
+    /** Form the weighting matrix **/
+
+    return;
+}
+
+
 void Task::outputPortSamples()
 {
     std::vector<Eigen::Affine3d> fkRobot;
@@ -1087,6 +1228,11 @@ void Task::outputPortSamples()
     orientationSamples[0].sourceFrame = _orientation_source_frame.get();
     orientationSamples[0].targetFrame = _orientation_target_frame.get();
     _orientation_samples_out.write(orientationSamples[0]);
+
+    /** Compute reaction forces weighting matrix **/
+    base::MatrixXd matrix;
+    this->computeWeightingMatrix(jointsSamplesOut, orientationSamples[0].orientation, matrix);
+    _weighting_samples_out.write(matrix);
 
     /** Ground Truth if available **/
     if (_pose_reference_samples.connected())

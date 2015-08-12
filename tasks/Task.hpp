@@ -8,6 +8,9 @@
 /** General Libraries **/
 #include <math.h> /** math library (for natural Log among others) **/
 #include <vector> /** std vector **/
+#include <fstream>
+#include <string> /** This should be already in sstream **/
+
 
 /** Eigen **/
 #include <Eigen/Core>/** Eigen core library **/
@@ -23,6 +26,17 @@
 
 /** Rock libraries **/
 #include "frame_helper/FrameHelper.h" /** Rock lib for manipulate frames **/
+
+/** ExoTer libraries **/
+#include <exoter_dynamics/ReactionForces.hpp>
+
+/* URDF */
+#include <urdf_parser/urdf_parser.h>
+#include <urdf_model/model.h>
+
+/** 3D Kinematics **/
+#include <threed_odometry/KinematicKDL.hpp> /** KDL model **/
+
 
 namespace localization_frontend {
 
@@ -109,13 +123,13 @@ namespace localization_frontend {
         /*** Control Flow Variables ***/
         /******************************/
 
-	/** Initial position for the world to navigation transform **/
-	bool initPosition, initAttitude;
+        /** Initial position for the world to navigation transform **/
+        bool initPosition, initAttitude;
 
         /** Number of samples to process in the input ports callback function **/
         NumberInputPorts number;
 
- 	/** Current counter of samples arrived to each input port **/
+ 	    /** Current counter of samples arrived to each input port **/
         CounterInputPorts counter;
 
         /** Data arrived ON/OFF Flag **/
@@ -127,17 +141,17 @@ namespace localization_frontend {
 
         double proprioceptive_output_frequency;
 
-        std::vector<std::string> odometry_jointNames;
+        std::vector<std::string> all_joint_names;
 
-        std::vector<std::string> zero_position_jointNames;
+        std::vector<std::string> zero_position_joint_names;
 
-        std::vector<std::string> zero_speed_jointNames;
+        std::vector<std::string> zero_speed_joint_names;
 
-        localization_frontend::NamedVectorString mimic_jointNames;
+        localization_frontend::NamedVectorString mimic_joint_names;
 
-        localization_frontend::NamedVectorString translation_jointNames;
+        localization_frontend::NamedVectorString translation_joint_names;
 
-        std::vector<std::string> filter_jointNames;
+        std::vector<std::string> filter_joint_names;
 
         /** FIR filter configuration structure **/
         FilterCoefficients filterConfig;
@@ -146,11 +160,23 @@ namespace localization_frontend {
         /*** General Internal Storage Variables ***/
         /******************************************/
 
+        /** Number of physical joints according to the model and task properties  **/
+        int number_robot_joints;
+
+        /** Wheel radius **/
+        double wheel_radius;
+
         /** Frame helper **/
         frame_helper::FrameHelper frameHelperLeft, frameHelperRight;
 
         /** Low-pass filter for Passive Joints */
         boost::shared_ptr< localization::FIR<FILTER_ORDER, FILTER_VECTOR_SIZE > > low_pass_filter;
+
+        /** Reaction forces **/
+        ::exoter_dynamics::ReactionForces exoter_rf;
+
+        /** Robot Kinematic Model **/
+        boost::shared_ptr< threed_odometry::KinematicKDL > robot_kinematics;
 
         /***********************************/
         /** Input ports dependent buffers **/
@@ -293,20 +319,33 @@ namespace localization_frontend {
         void cleanupHook();
 
         /** @brief Get the correct value from the input ports buffers
-	 */
-	void inputPortSamples();
+	    */
+	    void inputPortSamples();
 
         /** @brief Compute Cartesian and Model velocities 
-	 */
-	void calculateVelocities();
+	     */
+	    void calculateVelocities();
 
         /** @brief Port out the values
-	 */
+	    */
         void outputPortSamples();
 
         /** @brief Delta Distance calculation
-	 */
+	    */
         void distanceForExteroceptive();
+
+        /** @brief search joint by names and get back information
+         */
+        bool searchURDFJointNames(boost::shared_ptr<const urdf::Link> link, const std::string &name_to_search,
+                                Eigen::Vector3d &translation);
+
+        void joints_samplesUnpack(const ::base::samples::Joints &original_joints,
+                                const std::vector<std::string> &order_names,
+                                std::vector<double> &joint_positions);
+
+        /** @brief Compute the reaction forces weighting matrix
+         */
+        void computeWeightingMatrix(const ::base::samples::Joints &robot_joints, const Eigen::Quaterniond &orientation, base::MatrixXd &matrix);
 
      public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

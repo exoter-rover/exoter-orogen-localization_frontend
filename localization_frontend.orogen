@@ -6,6 +6,9 @@ name "localization_frontend"
 # header, and this header will be loaded here
 using_library "frame_helper" # Image Frames
 using_library "localization" # The IIR/FIR filter
+using_library "exoter_dynamics" # The Reaction forces
+using_library "urdfdom" # To know some information about ExoTeR URDF
+using_library "threed_odometry" # 3D-Kinematics for the contact points
 
 # If the component/deployments use data types that are defined in other oroGen
 # projects, these projects should be imported there as well.
@@ -23,8 +26,15 @@ task_context "Task" do
     #*************************
     #**** Task Properties ****
     #*************************
+    property('urdf_file', '/std/string').
+        doc "path to the rover urdf file"
+
     property('proprioceptive_output_frequency', 'double').
         doc 'Output frequency of the proprioceptive sensors samples (joints, inertial sensors and orientation).'
+
+    #**************************
+    #**** Frame Properties ****
+    #**************************
 
     property('orientation_source_frame', '/std/string').doc 'Frame for the transformer'
 
@@ -46,23 +56,44 @@ task_context "Task" do
 
     property('world_target_frame', '/std/string').doc 'Frame for the transformer'
 
-    property('odometry_jointNames', 'std/vector<std/string>').
+    #**************************
+    #**** Joint Properties ****
+    #**************************
+
+    property('all_joint_names', 'std/vector<std/string>').
 	    doc 'Locomotion joints searching by names.'
 
-    property('zero_position_jointNames', 'std/vector<std/string>').
+    property('contact_point_segments', 'std/vector<std/string>').
+	    doc 'Segment names for the segment of the last contact point in the URDF file. This is the last element per each chain.'
+
+    property('contact_angle_segments', 'std/vector<std/string>').
+	    doc 'Segment names for the segment of the last contact angle in the URDF file.'
+
+    property('slip_joint_names', 'std/vector<std/string>').
+	    doc 'Joints in the model which are part of the slip model.'
+
+    property('contact_joint_names', 'std/vector<std/string>').
+	    doc 'Joints in the model which are part of the contact angle.'
+
+    property('zero_position_joint_names', 'std/vector<std/string>').
     	doc 'Locomotion joints sub-vector searching by names to set the position to zero. Empty by default'
 
-    property('zero_speed_jointNames', 'std/vector<std/string>').
+    property('zero_speed_joint_names', 'std/vector<std/string>').
     	doc 'Locomotion joints sub-vector searching by names to set the speed to zero. Empty by default'
 
-    property('mimic_jointNames', 'localization_frontend::NamedVectorString').
+    property('mimic_joint_names', 'localization_frontend::NamedVectorString').
     	doc 'Joints which use other joints to mimic motion (position and velocity). Empty by default'
 
-    property('translation_jointNames', 'localization_frontend::NamedVectorString').
+    property('translation_joint_names', 'localization_frontend::NamedVectorString').
     	doc 'Joints which use other joints to convert angular rotation to translational displacement (position and speed). Empty by default'
 
-    property('wheelRadius', 'double').
-    	doc 'Effective wheel radius average for odometry'
+    property('wheel_radius_joint_names', 'std/vector<std/string>').
+    	doc 'URDF joint names to know where the information is regarding the wheel radius.'
+
+    property('passive_offset_joint_name', 'std/string').
+    	doc 'URDF joint names to know where the information is regarding the wheel radius.'
+
+
 
     property('attitude_covariance_adjustment', 'double').
         doc 'Value to fix some imu  log test that did not estimate the uncertainty correctly.'
@@ -77,8 +108,8 @@ task_context "Task" do
     property('filter_config', 'localization_frontend/FilterCoefficients').
         doc 'Configuration values to run the IIR/FIR filter over the noisy passive joints. Look in Types for further details.'
 
-    property('filter_jointNames', 'std/vector<std/string>').
-    	doc 'Joints in which the filter wants to be apply. These joints names MUST be also contained in the jointNames. '+
+    property('filter_joint_names', 'std/vector<std/string>').
+    	doc 'Joints in which the filter wants to be apply. These joints names MUST be also contained in the joint_names. '+
         'Maximum number of three joints. In case more joints are required you need to change the code due to template classes. FILTER_VECTOR_SIZE'
 
     #******************************
@@ -151,6 +182,12 @@ task_context "Task" do
 
     output_port('orientation_samples_out', '/base/samples/RigidBodyState').
     	doc 'Orientation samples measurements.'
+
+    output_port('weighting_samples_out', '/base/MatrixXd').
+       doc 'provides timestamped Weight information about the contact points.'+
+            'It defines which contact point is in contact with the ground using a Weighting Matrix.'+
+            'In case no information is provided, it assumes all the points are equally in contact with the ground'+
+            '(support polygon or contact sensory information could be use to provide this matrix).'
 
     output_port('point_cloud_samples_out', 'base/samples/Pointcloud').
     	doc 'Point cloud samples.'
