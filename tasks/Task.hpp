@@ -339,13 +339,16 @@ namespace localization_frontend {
         bool searchURDFJointNames(boost::shared_ptr<const urdf::Link> link, const std::string &name_to_search,
                                 Eigen::Vector3d &translation);
 
+        /** @brief unpack the joint positions for the forward kinematic model
+         */
         void joints_samplesUnpack(const ::base::samples::Joints &original_joints,
                                 const std::vector<std::string> &order_names,
                                 std::vector<double> &joint_positions);
 
         /** @brief Compute the reaction forces weighting matrix
          */
-        void computeWeightingMatrix(const ::base::samples::Joints &robot_joints, const Eigen::Quaterniond &orientation, base::MatrixXd &matrix);
+        void computeWeightingMatrix(const ::base::samples::Joints &robot_joints, const Eigen::Quaterniond &orientation,
+                Eigen::Matrix<double, ::exoter_dynamics::NUMBER_OF_WHEELS, 1> &forces, base::MatrixXd &matrix);
 
      public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -189,6 +189,9 @@ task_context "Task" do
             'In case no information is provided, it assumes all the points are equally in contact with the ground'+
             '(support polygon or contact sensory information could be use to provide this matrix).'
 
+    output_port('reaction_forces_samples_out', '/base/Vector6d').
+        doc 'Contact point reaction forces.'
+
     output_port('point_cloud_samples_out', 'base/samples/Pointcloud').
     	doc 'Point cloud samples.'
 
