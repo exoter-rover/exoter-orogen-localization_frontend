@@ -183,9 +183,9 @@ task_context "Task" do
     output_port('orientation_samples_out', '/base/samples/RigidBodyState').
     	doc 'Orientation samples measurements.'
 
-    output_port('weighting_samples_out', '/base/MatrixXd').
+    output_port('weighting_samples_out', '/base/VectorXd').
        doc 'provides timestamped Weight information about the contact points.'+
-            'It defines which contact point is in contact with the ground using a Weighting Matrix.'+
+            'It defines which contact point is in contact with the ground using a Weighting Matrix (diagonal of the matrix).'+
             'In case no information is provided, it assumes all the points are equally in contact with the ground'+
             '(support polygon or contact sensory information could be use to provide this matrix).'
 

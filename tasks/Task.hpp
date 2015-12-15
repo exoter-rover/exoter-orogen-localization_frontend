@@ -347,8 +347,8 @@ namespace localization_frontend {
 
         /** @brief Compute the reaction forces weighting matrix
          */
-        void computeWeightingMatrix(const ::base::samples::Joints &robot_joints, const Eigen::Quaterniond &orientation,
-                Eigen::Matrix<double, ::exoter_dynamics::NUMBER_OF_WHEELS, 1> &forces, base::MatrixXd &matrix);
+        void computeWeightingMatrixDiagonal(const ::base::samples::Joints &robot_joints, const Eigen::Quaterniond &orientation,
+                Eigen::Matrix<double, ::exoter_dynamics::NUMBER_OF_WHEELS, 1> &forces, base::VectorXd &matrix_diagonal);
 
      public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

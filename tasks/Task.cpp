@@ -217,6 +217,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
     /** Transform the orientation world(osg)_imu to world(osg)_body **/
     cbOrientationSamples[0].orientation = orientation_samples_sample.orientation * qtf.inverse(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
     cbOrientationSamples[0].cov_orientation = tf.inverse().rotation() * orientation_samples_sample.cov_orientation * tf.inverse().rotation().transpose(); // Tworld(osg)_body = Tworld(osg)_imu * (Tbody_imu)^-1
+    base::guaranteeSPD< Eigen::Matrix<double, 3, 3> > (cbOrientationSamples[0].cov_orientation);
 
     #ifdef DEBUG_PRINTS
     euler = base::getEuler(cbOrientationSamples[0].orientation);
@@ -1167,10 +1168,10 @@ void Task::joints_samplesUnpack(const ::base::samples::Joints &original_joints,
     return;
 }
 
-void Task::computeWeightingMatrix(const ::base::samples::Joints &robot_joints,
+void Task::computeWeightingMatrixDiagonal(const ::base::samples::Joints &robot_joints,
                                 const Eigen::Quaterniond &orientation,
                                 Eigen::Matrix<double, ::exoter_dynamics::NUMBER_OF_WHEELS, 1> &forces,
-                                base::MatrixXd &matrix)
+                                base::VectorXd &matrix_diagonal)
 {
     /** Get joints position and velocity ordered by Motion Model joint names **/
     std::vector<double> joint_positions;
@@ -1194,16 +1195,13 @@ void Task::computeWeightingMatrix(const ::base::samples::Joints &robot_joints,
     /** Compute the reaction forces **/
     this->exoter_rf.forceAnalysis(base::Vector3d::Zero(), wheel_positions, orientation, 1.0, forces);
 
-    /** Form the weighting matrix **/
-    matrix.resize(::exoter_dynamics::NUMBER_OF_WHEELS*::exoter_dynamics::NUMBER_OF_WHEELS,
-                    ::exoter_dynamics::NUMBER_OF_WHEELS*::exoter_dynamics::NUMBER_OF_WHEELS);
-    matrix.setZero();
+    /** Form the weighting matrix diagonal (6 times the number of wheels) **/
+    matrix_diagonal.resize(6*::exoter_dynamics::NUMBER_OF_WHEELS, 1);
+    matrix_diagonal.setZero();
 
     for (register unsigned int i=0; i < ::exoter_dynamics::NUMBER_OF_WHEELS; ++i)
     {
-        matrix.block(i*::exoter_dynamics::NUMBER_OF_WHEELS, i*::exoter_dynamics::NUMBER_OF_WHEELS,
-                ::exoter_dynamics::NUMBER_OF_WHEELS, ::exoter_dynamics::NUMBER_OF_WHEELS) =
-                forces[i] * Eigen::Matrix<double, 6, 6>::Identity();
+        matrix_diagonal.block(6*i, 0, 6, 1) =  forces[i] * Eigen::Matrix<double, 6, 1>::Ones();
     }
 
     return;
@@ -1235,11 +1233,11 @@ void Task::outputPortSamples()
     _orientation_samples_out.write(orientationSamples[0]);
 
     /** Compute reaction forces weighting matrix **/
-    base::MatrixXd matrix;
+    base::VectorXd matrix_diagonal;
     Eigen::Matrix<double, ::exoter_dynamics::NUMBER_OF_WHEELS, 1> forces;
-    this->computeWeightingMatrix(jointsSamplesOut, orientationSamples[0].orientation, forces, matrix);
+    this->computeWeightingMatrixDiagonal(jointsSamplesOut, orientationSamples[0].orientation, forces, matrix_diagonal);
     _reaction_forces_samples_out.write(forces);
-    _weighting_samples_out.write(matrix);
+    _weighting_samples_out.write(matrix_diagonal);
 
     /** Ground Truth if available **/
     if (_pose_reference_samples.connected())
