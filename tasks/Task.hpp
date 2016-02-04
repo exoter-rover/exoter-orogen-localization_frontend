@@ -129,7 +129,7 @@ namespace localization_frontend {
         /** Number of samples to process in the input ports callback function **/
         NumberInputPorts number;
 
- 	    /** Current counter of samples arrived to each input port **/
+        /** Current counter of samples arrived to each input port **/
         CounterInputPorts counter;
 
         /** Data arrived ON/OFF Flag **/

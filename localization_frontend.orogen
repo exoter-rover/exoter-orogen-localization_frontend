@@ -158,7 +158,7 @@ task_context "Task" do
     # to compute the sensor output in body frame.
     ##############################################
     transformer do
-	    transform "imu", "body" # imu to body in "Source in target" convention
+        transform "imu", "body" # imu to body in "Source in target" convention
         transform "laser", "body" # laser to body in "Source in target" convention
     	align_port("joints_samples", 0.04)
     	align_port("inertial_samples", 0.04)
