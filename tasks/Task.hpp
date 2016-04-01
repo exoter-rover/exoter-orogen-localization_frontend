@@ -37,6 +37,13 @@
 /** 3D Kinematics **/
 #include <threed_odometry/KinematicKDL.hpp> /** KDL model **/
 
+/* Base types **/
+#include <base/Time.hpp>
+#include <base/Eigen.hpp>
+#include <base/samples/Joints.hpp>
+#include <base/samples/Frame.hpp>
+#include <base/samples/IMUSensors.hpp>
+#include <base/samples/RigidBodyState.hpp>
 
 namespace localization_frontend {
 
