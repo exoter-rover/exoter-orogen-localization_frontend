@@ -2,8 +2,8 @@
 #define FRONT_END_TYPES_H
 
 #include <vector>
-#include <base/time.h>
-#include <base/eigen.h>
+#include <base/Time.hpp>
+#include <base/Eigen.hpp>
 #include <base/NamedVector.hpp>
 
 namespace localization_frontend
