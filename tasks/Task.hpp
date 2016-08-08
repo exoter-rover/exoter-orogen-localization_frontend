@@ -343,7 +343,7 @@ namespace localization_frontend {
 
         /** @brief search joint by names and get back information
          */
-        bool searchURDFJointNames(boost::shared_ptr<const urdf::Link> link, const std::string &name_to_search,
+        bool searchURDFJointNames(urdf::LinkConstSharedPtr link, const std::string &name_to_search,
                                 Eigen::Vector3d &translation);
 
         /** @brief unpack the joint positions for the forward kinematic model

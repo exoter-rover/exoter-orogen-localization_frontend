@@ -641,7 +641,7 @@ bool Task::configureHook()
     }
     xml_file.close();
 
-    boost::shared_ptr<urdf::ModelInterface> robot = urdf::parseURDF(xml_string);
+    urdf::ModelInterfaceSharedPtr robot = urdf::parseURDF(xml_string);
     if (!robot)
     {
         throw std::runtime_error("[Localization Front-End] [Info] Configuration could not parse URDF model\n");
@@ -1121,11 +1121,11 @@ void Task::calculateVelocities()
     return;
 }
 
-bool Task::searchURDFJointNames(boost::shared_ptr<const urdf::Link> link, const std::string &name_to_search,
+bool Task::searchURDFJointNames(urdf::LinkConstSharedPtr link, const std::string &name_to_search,
                                 Eigen::Vector3d &translation)
 {
     double r, p, y;
-    for (std::vector<boost::shared_ptr<urdf::Link> >::const_iterator child =
+    for (std::vector< std::shared_ptr <urdf::Link> >::const_iterator child =
             link->child_links.begin(); child != link->child_links.end();
             ++child)
     {
