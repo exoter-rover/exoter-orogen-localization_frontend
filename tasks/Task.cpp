@@ -11,6 +11,8 @@
 
 //#define DEBUG_PRINTS 1
 
+#include <base/Matrix.hpp>
+
 using namespace localization_frontend;
 
 Task::Task(std::string const& name)
