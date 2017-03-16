@@ -281,7 +281,7 @@ void Task::orientation_samplesTransformerCallback(const base::Time &ts, const ::
         if (initAttitude)
         {
             /** Store the value as the initial one for the world to navigation **/
-            world2navigationRbs.orientation = attitude; //At the first sample Tworld_body is Tworld_navigation
+            world2navigationRbs.orientation.setIdentity();// = attitude; //At the first sample Tworld_body is Tworld_navigation
             world2navigationRbs.angular_velocity.setZero();
 
             /** Assume very well know initial attitude **/
