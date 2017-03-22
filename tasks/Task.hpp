@@ -24,12 +24,6 @@
 #include <boost/circular_buffer.hpp> /** For circular buffers **/
 #include <boost/shared_ptr.hpp> /** Shared pointers **/
 
-/** Rock libraries **/
-#include "frame_helper/FrameHelper.h" /** Rock lib for manipulate frames **/
-
-/** ExoTer libraries **/
-#include <exoter_dynamics/ReactionForces.hpp>
-
 /* URDF */
 #include <urdf_parser/urdf_parser.h>
 #include <urdf_model/model.h>
@@ -55,14 +49,12 @@ namespace localization_frontend {
             jointsSamples = 0;
             imuSamples = 0;
             orientationSamples = 0;
-            referencePoseSamples = 0;
             return;
         }
 
-       	unsigned int jointsSamples; /** counter for encoders samples**/
-     	unsigned int imuSamples; /** counter of inertial sensors samples **/
-     	unsigned int orientationSamples; /** counter of orientation samples **/
-     	unsigned int referencePoseSamples; /** counter of pose information coming from external measurement **/
+        unsigned int jointsSamples; /** counter for encoders samples**/
+        unsigned int imuSamples; /** counter of inertial sensors samples **/
+        unsigned int orientationSamples; /** counter of orientation samples **/
     };
 
     /** Number of samples to process in the callback function **/
@@ -73,14 +65,12 @@ namespace localization_frontend {
             jointsSamples = 0;
             imuSamples = 0;
             orientationSamples = 0;
-            referencePoseSamples = 0;
             return;
         }
 
         unsigned int jointsSamples; /** number of encoders samples for the re-sampling**/
         unsigned int imuSamples; /** number of inertial sensors samples **/
         unsigned int orientationSamples; /** number of orientation samples **/
-        unsigned int referencePoseSamples; /** number of pose information coming from external measurement **/
     };
 
     /** Input port samples arrived ON/OFF flags **/
@@ -91,14 +81,12 @@ namespace localization_frontend {
             jointsSamples = false;
             imuSamples = false;
             orientationSamples = false;
-            referencePoseSamples = false;
             return;
         }
 
         bool jointsSamples;//Encoders
         bool imuSamples;//Inertial sensors
         bool orientationSamples;//Orientation
-        bool referencePoseSamples;//Initial pose
     };
 
     /*! \class Task 
@@ -129,9 +117,6 @@ namespace localization_frontend {
         /******************************/
         /*** Control Flow Variables ***/
         /******************************/
-
-        /** Initial position for the world to navigation transform **/
-        bool initPosition, initAttitude;
 
         /** Number of samples to process in the input ports callback function **/
         NumberInputPorts number;
@@ -173,14 +158,8 @@ namespace localization_frontend {
         /** Wheel radius **/
         double wheel_radius;
 
-        /** Frame helper **/
-        frame_helper::FrameHelper frameHelperLeft, frameHelperRight;
-
         /** Low-pass filter for Passive Joints */
         boost::shared_ptr< localization::FIR<FILTER_ORDER, FILTER_VECTOR_SIZE > > low_pass_filter;
-
-        /** Reaction forces **/
-        ::exoter_dynamics::ReactionForces exoter_rf;
 
         /** Robot Kinematic Model **/
         boost::shared_ptr< threed_odometry::KinematicKDL > robot_kinematics;
@@ -193,13 +172,11 @@ namespace localization_frontend {
         boost::circular_buffer<base::samples::Joints> cbJointsSamples;
         boost::circular_buffer<base::samples::IMUSensors> cbImuSamples;
         boost::circular_buffer<base::samples::RigidBodyState> cbOrientationSamples;
-        boost::circular_buffer<base::samples::RigidBodyState> cbReferencePoseSamples;
 
         /** Buffer for filtered Inputs port samples (Store the samples and compute the velocities) **/
         boost::circular_buffer<base::samples::Joints> jointsSamples; /** Encoder Status information  **/
         boost::circular_buffer<base::samples::IMUSensors> imuSamples; /** IMU samples **/
         boost::circular_buffer<base::samples::RigidBodyState> orientationSamples; /** IMU samples **/
-        boost::circular_buffer<base::samples::RigidBodyState> referencePoseSamples; /** Pose information (init and debug)**/
 
         /***************************/
         /** Output port variables **/
@@ -211,42 +188,16 @@ namespace localization_frontend {
         /** Calibrated and compensated inertial values **/
         base::samples::IMUSensors inertialSamplesOut;
 
-        /** Ground truth out coming for an external system (if available like Vicon or GPS) */
-        base::samples::RigidBodyState referenceOut;
-
-        /** Delta pose ground truth out coming for an external system (if available like Vicon or GPS) */
-        base::samples::RigidBodyState delta_referenceOut;
-
-        /** Calculated initial navigation frame pose expressed in world frame */
-        base::samples::RigidBodyState world2navigationRbs;
-
-        /** Calculated the world_osg to intermediate world frame */
-        base::samples::RigidBodyState world_osg2worldRbs;
-
-        /** Undistorted camera images **/
-        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> leftFrame;
-        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> rightFrame;
-
     protected:
 
         /************************/
         /** Callback functions **/
         /************************/
+        virtual void inertial_samplesCallback(const base::Time &ts, const ::base::samples::IMUSensors &inertial_samples_sample);
 
-        virtual void pose_reference_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &pose_reference_samples_sample);
+        virtual void orientation_samplesCallback(const base::Time &ts, const ::base::samples::RigidBodyState &orientation_samples_sample);
 
-        virtual void inertial_samplesTransformerCallback(const base::Time &ts, const ::base::samples::IMUSensors &inertial_samples_sample);
-
-        virtual void orientation_samplesTransformerCallback(const base::Time &ts, const ::base::samples::RigidBodyState &orientation_samples_sample);
-
-        virtual void joints_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample);
-
-        virtual void left_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &left_frame_sample);
-
-        virtual void right_frameTransformerCallback(const base::Time &ts, const ::RTT::extras::ReadOnlyPointer< ::base::samples::frame::Frame > &right_frame_sample);
-
-        virtual void point_cloud_samplesTransformerCallback(const base::Time &ts, const ::base::samples::Pointcloud &point_cloud_samples_sample);
-
+        virtual void joints_samplesCallback(const base::Time &ts, const ::base::samples::Joints &joints_samples_sample);
 
 
     public:
@@ -352,12 +303,7 @@ namespace localization_frontend {
                                 const std::vector<std::string> &order_names,
                                 std::vector<double> &joint_positions);
 
-        /** @brief Compute the reaction forces weighting matrix
-         */
-        void computeWeightingMatrixDiagonal(const ::base::samples::Joints &robot_joints, const Eigen::Quaterniond &orientation,
-                Eigen::Matrix<double, ::exoter_dynamics::NUMBER_OF_WHEELS, 1> &forces, base::VectorXd &matrix_diagonal);
-
-     public:
+      public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     };
