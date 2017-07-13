@@ -56,6 +56,11 @@ void Task::inertial_samplesCallback(const base::Time &ts, const ::base::samples:
     Eigen::Quaternion <double> qtf; /** Rotation part of the transformation in quaternion form **/
 
     /** Get the transformation (transformation) Tbody_imu which is body = Tbody_imu imu **/
+    ::base::samples::RigidBodyState body_state;
+    body_state.sourceFrame = "imu"; body_state.targetFrame = "body";
+    body_state.position << 0.00417, -0.0399, 0.0052;
+    body_state.orientation = Eigen::Quaternion <double>(Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitZ()));
+    _body_to_imu_transformation.set(body_state); //p_body = T_body_to_imu p_imu
     tf = _body_to_imu_transformation.value();
 
     qtf = Eigen::Quaternion <double> (tf.rotation());//!Quaternion from Body to imu (transforming samples from imu to body)
