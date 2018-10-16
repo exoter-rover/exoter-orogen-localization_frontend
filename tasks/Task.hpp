@@ -46,6 +46,9 @@
 #include <base/samples/RigidBodyState.hpp>
 
 namespace localization_frontend {
+    static const unsigned short DEFAULT_CIRCULAR_BUFFER_SIZE = 2; /** Default number of objects to store regarding the inputs port **/
+    static const unsigned short FILTER_ORDER = 25; /** FIR filter Order **/
+    static const unsigned short FILTER_VECTOR_SIZE = 3; /** Vector dimension in the FIR filter **/
 
     /** Current counter of samples arrived to each port **/
     struct CounterInputPorts
@@ -118,11 +121,6 @@ namespace localization_frontend {
     class Task : public TaskBase
     {
 	friend class TaskBase;
-
-    protected:
-        static const int  DEFAULT_CIRCULAR_BUFFER_SIZE = 2; /** Default number of objects to store regarding the inputs port **/
-        static const unsigned int  FILTER_ORDER = 25; /** FIR filter Order **/
-        static const unsigned int  FILTER_VECTOR_SIZE = 3; /** Vector dimension in the FIR filter **/
 
     protected:
 
